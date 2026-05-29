@@ -1,0 +1,8 @@
+{
+  "name": "solradar-telegram-bot",
+  "version": "1.0.0",
+  "description": "SOL RADAR otomatik Telegram sinyal botu",
+  "main": "bot.js",
+  "scripts": { "start": "node bot.js" },
+  "engines": { "node": ">=18" }
+}

@@ -343,6 +343,18 @@ function calcConfidence(d) {
   else if (vlr >= 0.5)           score += 2;
   else                           reasons.push('hacim zayıf');
 
+  // ── VETO: Kritik riskler tavan koyar (iyi kriterler maskelemesin) ──
+  // Holder konsantrasyonu çok yüksekse, başka her şey mükemmel olsa bile ONAYLI olamaz
+  if (d.top1 != null) {
+    if (d.top3 > 40)       score = Math.min(score, 45);  // 3 cüzdan %40+ = dump riski, max 45 (çöp/izle sınırı)
+    else if (d.top3 > 30)  score = Math.min(score, 64);  // %30-40 = en fazla İZLE (70 altı), ONAYLI olamaz
+    if (d.top1 > 20)       score = Math.min(score, 45);  // tek cüzdan %20+ = tehlikeli
+    else if (d.top1 > 15)  score = Math.min(score, 64);  // tek cüzdan %15-20 = en fazla İZLE
+  }
+  // h1 negatifse (pump söndü) ONAYLI olamaz
+  if (d.h1 <= -10) score = Math.min(score, 45);
+  else if (d.h1 < 0) score = Math.min(score, 64);
+
   return { score: Math.round(score), reasons };
 }
 

@@ -464,9 +464,13 @@ async function scanAndPost() {
       if (confidence < 50) { seen.add(addr); continue; }
 
       seen.add(addr);
+      // Sembol: önce DexScreener baseToken (güvenilir), sonra header — URL/uzun metin gelirse temizle
+      let symbol = p.baseToken?.symbol || tk.header || '???';
+      if (/^https?:|\/|\s/.test(symbol) || symbol.length > 15) symbol = p.baseToken?.symbol || '???';
+      symbol = symbol.replace(/[^A-Za-z0-9_$.]/g, '').slice(0, 15) || '???';
       const token = {
         address: addr,
-        symbol: tk.header || p.baseToken?.symbol || '???',
+        symbol,
         liquidity: liq, change5m: m5, ageMin, trapScore,
         rugScore: rugScore ?? '?',
         boost: boostedSet[addr] || 0,

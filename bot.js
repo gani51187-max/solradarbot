@@ -385,7 +385,7 @@ ${ciBar} <b>Güven: ${ci}/100</b>
 
 <code>${t.address}</code>
 
-⚡ <a href="https://jup.ag/swap/SOL-${t.address}?referrer=ACmAkQLb71nqH4TcbKC6CEHJJz2qPvUAGXJjP8zahfTy&feeBps=30">Al (Jupiter)</a> | 📊 <a href="https://dexscreener.com/solana/${t.address}">Chart</a>
+⚡ <a href="https://jup.ag/swap/So11111111111111111111111111111111111111112-${t.address}?referrer=ACmAkQLb71nqH4TcbKC6CEHJJz2qPvUAGXJjP8zahfTy&feeBps=30">Al (Jupiter)</a> | 📊 <a href="https://dexscreener.com/solana/${t.address}">Chart</a>
 
 <i>⚠ Yatırım tavsiyesi değil. DYOR.</i>`;
 }

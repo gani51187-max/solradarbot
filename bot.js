@@ -241,37 +241,46 @@ async function pollUpdates() {
 }
 
 // ── RugCheck skoru ──
-async function getRugScore(addr) {
-  try {
-    const r = await fetch(`https://api.rugcheck.xyz/v1/tokens/${addr}/report/summary`);
-    if (!r.ok) return null;
-    const d = await r.json();
-    if (d.score !== undefined) return Math.max(0, Math.min(100, Math.round(d.score)));
-    if (d.risks) {
-      const danger = d.risks.filter(x => x.level === 'danger' || x.level === 'error').length;
-      const warn   = d.risks.filter(x => x.level === 'warn'   || x.level === 'warning').length;
-      return Math.max(0, 100 - danger * 25 - warn * 10);
-    }
-    return 50;
-  } catch { return null; }
-}
+// ── RugCheck: tek çağrı, hem skor hem holder (cache + 429 koruması) ──
+const rugCache = new Map();         // addr -> {score, top1, top3, ts}
+const RUG_TTL = 10 * 60 * 1000;     // 10 dk cache
+let rugBlockedUntil = 0;            // 429 yedikten sonra bekleme
 
-// ── Holder konsantrasyonu (pump-dump filtresi) ──
-// RugCheck full report'tan ilk cüzdanların yüzdesini al
-async function getHolderConcentration(addr) {
+async function getRugData(addr) {
+  // Cache kontrol
+  const c = rugCache.get(addr);
+  if (c && Date.now() - c.ts < RUG_TTL) return c;
+  // Rate-limit bekleme süresindeyse hiç çağırma
+  if (Date.now() < rugBlockedUntil) return { score: null, top1: null, top3: null, ts: Date.now(), unavailable: true };
+
   try {
     const r = await fetch(`https://api.rugcheck.xyz/v1/tokens/${addr}/report`);
-    if (!r.ok) return null;
+    if (r.status === 429) {
+      rugBlockedUntil = Date.now() + 60 * 1000;  // 1 dk soğuma
+      console.log('⚠️ RugCheck 429 — 1 dk soğuma');
+      return { score: null, top1: null, top3: null, ts: Date.now(), unavailable: true };
+    }
+    if (!r.ok) return { score: null, top1: null, top3: null, ts: Date.now(), unavailable: true };
     const d = await r.json();
+
+    // Skor
+    let score = null;
+    if (d.score_normalised !== undefined) score = Math.max(0, Math.min(100, Math.round(d.score_normalised)));
+    else if (d.score !== undefined) score = Math.max(0, Math.min(100, Math.round(d.score)));
+
+    // Holder konsantrasyonu
+    let top1 = null, top3 = null;
     const holders = d.topHolders || [];
-    if (!holders.length) return null;
-    // Likidite havuzu/kilitli cüzdanları atla (genelde insider değil)
-    const real = holders.filter(h => !h.insider && !(h.owner && d.markets?.some(m => m.lp?.lpMint === h.address)));
-    const list = (real.length ? real : holders).map(h => h.pct || 0);
-    const top1 = list[0] || 0;
-    const top3 = (list[0] || 0) + (list[1] || 0) + (list[2] || 0);
-    return { top1, top3 };
-  } catch { return null; }
+    if (holders.length) {
+      const real = holders.filter(h => !h.insider && !(h.owner && d.markets?.some(m => m.lp?.lpMint === h.address)));
+      const list = (real.length ? real : holders).map(h => h.pct || 0);
+      top1 = list[0] || 0;
+      top3 = (list[0] || 0) + (list[1] || 0) + (list[2] || 0);
+    }
+    const res = { score, top1, top3, ts: Date.now() };
+    rugCache.set(addr, res);
+    return res;
+  } catch { return { score: null, top1: null, top3: null, ts: Date.now(), unavailable: true }; }
 }
 
 // ── Tuzak skoru ──
@@ -303,21 +312,21 @@ function calcConfidence(d) {
   let score = 0;
   const reasons = [];
 
-  // RugCheck güvenlik (max 25)
+  // RugCheck güvenlik (max 25) — veri yoksa nötr (ceza değil)
   if (d.rugScore != null) {
     if (d.rugScore >= 90)      { score += 25; }
     else if (d.rugScore >= 80) { score += 20; }
     else if (d.rugScore >= 70) { score += 12; reasons.push('rug orta'); }
     else                       { score += 0;  reasons.push('rug düşük'); }
-  } else { score += 10; }
+  } else { score += 16; reasons.push('rug verisi yok'); }  // nötr — fiyat aksiyonu karar versin
 
-  // Holder konsantrasyonu (max 25) — en kritik dump göstergesi
+  // Holder konsantrasyonu (max 25) — en kritik dump göstergesi; veri yoksa nötr
   if (d.top1 != null) {
     if (d.top3 <= 20)      score += 25;
     else if (d.top3 <= 30) { score += 16; reasons.push('top3 orta'); }
     else if (d.top3 <= 45) { score += 6;  reasons.push('top3 yüksek'); }
     else                   { score += 0;  reasons.push('konsantrasyon riski'); }
-  } else { score += 12; }
+  } else { score += 16; }  // nötr
 
   // Follow-through: h1 teyidi (max 20)
   if (d.h1 > 10)      score += 20;
@@ -450,9 +459,10 @@ async function scanAndPost() {
       if (ageMin < FILTERS.minAgeMin) continue;        // ilk dakikalar manipülatif
       if (buys <= sells) continue;                     // satış baskısı
 
-      // ── Veri topla ──
-      const rugScore = await getRugScore(addr);
-      const conc = await getHolderConcentration(addr);
+      // ── Veri topla (tek RugCheck çağrısı) ──
+      const rug = await getRugData(addr);
+      const rugScore = rug.score;
+      const conc = (rug.top1 != null) ? { top1: rug.top1, top3: rug.top3 } : null;
 
       // ── GÜVEN ENDEKSİ HESAPLA ──
       const { score: confidence, reasons } = calcConfidence({

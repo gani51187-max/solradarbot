@@ -503,7 +503,7 @@ async function scanAndPost() {
         await sendTelegram(PREMIUM_CHAT, PREMIUM_THREAD, '⭐ <b>[PREMIUM]</b>\n\n' + msg);
         console.log(`✅ ONAYLI (${confidence}): $${token.symbol}`);
         setTimeout(async () => {
-          await sendTelegram(FREE_CHAT, FREE_THREAD, msg + '\n\n💎 <i>Premium 8 dk önce gördü. Üyelik için: @gani188</i>');
+          await sendTelegram(FREE_CHAT, FREE_THREAD, msg + '\n\n💎 <i>Premium 8 dk önce gördü. Üyelik için: @Solradarapp</i>');
         }, FREE_DELAY_MS);
       } else {
         // İZLE (50-69) → sadece Premium kanal, riskli etiketiyle

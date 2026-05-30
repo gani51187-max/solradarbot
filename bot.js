@@ -198,13 +198,21 @@ async function handleCommand(msg) {
     return;
   }
 
-  // /performans — sinyal başarı takibi (sadece admin)
+  // /performans — performance report (admin only)
   if (text.startsWith('/performans') || text.startsWith('/performance')) {
     const parts = text.split(' ');
     const days = parseInt(parts[1]) || 7;
     const report = buildPerformanceReport(days);
-    // Komutu yazana özelden cevap ver (ADMIN_ID boş olsa bile çalışır)
     await sendTelegram(fromId, null, report);
+    return;
+  }
+
+  // /sharex [days] — X (Twitter) ready stats post
+  if (text.startsWith('/sharex')) {
+    const days = parseInt(text.split(' ')[1]) || 7;
+    const post = buildShareX(days);
+    if (!post) { await sendTelegram(fromId, null, '📊 No signal data yet to share.'); return; }
+    await sendTelegram(fromId, null, `📋 <b>Copy &amp; paste to X/Twitter:</b>\n\n<pre>${post}</pre>`);
     return;
   }
 
@@ -257,7 +265,7 @@ async function getRugData(addr) {
     const r = await fetch(`https://api.rugcheck.xyz/v1/tokens/${addr}/report`);
     if (r.status === 429) {
       rugBlockedUntil = Date.now() + 60 * 1000;  // 1 dk soğuma
-      console.log('⚠️ RugCheck 429 — 1 dk soğuma');
+      console.log('⚠️ RugCheck 429 — cooling 60s');
       return { score: null, top1: null, top3: null, ts: Date.now(), unavailable: true };
     }
     if (!r.ok) return { score: null, top1: null, top3: null, ts: Date.now(), unavailable: true };
@@ -312,45 +320,45 @@ function calcConfidence(d) {
   let score = 0;
   const reasons = [];
 
-  // RugCheck güvenlik (max 25) — veri yoksa nötr (ceza değil)
+  // RugCheck safety (max 25) — neutral if unavailable
   if (d.rugScore != null) {
     if (d.rugScore >= 90)      { score += 25; }
     else if (d.rugScore >= 80) { score += 20; }
-    else if (d.rugScore >= 70) { score += 12; reasons.push('rug orta'); }
-    else                       { score += 0;  reasons.push('rug düşük'); }
-  } else { score += 16; reasons.push('rug verisi yok'); }  // nötr — fiyat aksiyonu karar versin
+    else if (d.rugScore >= 70) { score += 12; reasons.push('rug medium'); }
+    else                       { score += 0;  reasons.push('rug low'); }
+  } else { score += 16; reasons.push('rug data unavailable'); }
 
-  // Holder konsantrasyonu (max 25) — en kritik dump göstergesi; veri yoksa nötr
+  // Holder concentration (max 25) — neutral if unavailable
   if (d.top1 != null) {
     if (d.top3 <= 20)      score += 25;
-    else if (d.top3 <= 30) { score += 16; reasons.push('top3 orta'); }
-    else if (d.top3 <= 45) { score += 6;  reasons.push('top3 yüksek'); }
-    else                   { score += 0;  reasons.push('konsantrasyon riski'); }
-  } else { score += 16; }  // nötr
+    else if (d.top3 <= 30) { score += 16; reasons.push('top3 medium'); }
+    else if (d.top3 <= 45) { score += 6;  reasons.push('top3 high'); }
+    else                   { score += 0;  reasons.push('concentration risk'); }
+  } else { score += 16; }
 
-  // Follow-through: h1 teyidi (max 20)
+  // Follow-through: h1 check (max 20)
   if (d.h1 > 10)      score += 20;
   else if (d.h1 > 0)  score += 14;
-  else if (d.h1 > -10){ score += 5; reasons.push('h1 zayıf'); }
-  else                { score += 0; reasons.push('h1 negatif (pump söndü)'); }
+  else if (d.h1 > -10){ score += 5; reasons.push('h1 weak'); }
+  else                { score += 0; reasons.push('h1 negative (pump faded)'); }
 
-  // Tuzak skoru (max 15)
+  // Trap score (max 15)
   if (d.trapScore >= 80)      score += 15;
   else if (d.trapScore >= 60) score += 10;
-  else if (d.trapScore >= 40) { score += 5; reasons.push('tuzak sinyali'); }
-  else                        { score += 0; reasons.push('tuzak riski'); }
+  else if (d.trapScore >= 40) { score += 5; reasons.push('trap signal'); }
+  else                        { score += 0; reasons.push('trap risk'); }
 
-  // Likidite (max 10)
+  // Liquidity (max 10)
   if (d.liquidity >= 30000)      score += 10;
   else if (d.liquidity >= 15000) score += 7;
   else if (d.liquidity >= 8000)  score += 4;
-  else                           { score += 0; reasons.push('düşük likidite'); }
+  else                           { score += 0; reasons.push('low liquidity'); }
 
-  // Hacim/likidite sağlığı (max 5)
+  // Volume/liquidity health (max 5)
   const vlr = d.liquidity > 0 ? d.vol1 / d.liquidity : 0;
   if (vlr >= 1 && vlr <= 6)      score += 5;
   else if (vlr >= 0.5)           score += 2;
-  else                           reasons.push('hacim zayıf');
+  else                           reasons.push('low volume');
 
   // ── VETO: Kritik riskler tavan koyar (iyi kriterler maskelemesin) ──
   // Holder konsantrasyonu çok yüksekse, başka her şey mükemmel olsa bile ONAYLI olamaz
@@ -367,27 +375,38 @@ function calcConfidence(d) {
   return { score: Math.round(score), reasons };
 }
 
+// ── Progress bar helper ──
+function bar(val, max=100, len=8){
+  const f=Math.round(Math.min(val,max)/max*len);
+  return '▰'.repeat(f)+'▱'.repeat(len-f);
+}
+
 function formatMessage(t) {
-  const boostLine = t.boost > 0 ? `\n🚀 <b>DexScreener Boosted</b> (x${t.boost})` : '';
-  const mcLine = t.marketCap > 0 ? `\n💰 Market Cap: <b>${fmt(t.marketCap)}</b>` : '';
-  const concLine = (t.top1 != null) ? `\n👥 Top holder: <b>${t.top1.toFixed(1)}%</b> | Top 3: <b>${t.top3.toFixed(1)}%</b>` : '';
-  // Güven endeksi başlık
   const ci = t.confidence ?? 0;
-  const tier = ci >= 70 ? '✅ ONAYLI' : ci >= 50 ? '⚠️ İZLE' : '🔴 RİSKLİ';
+  const tier = ci >= 70 ? '✅ CONFIRMED' : ci >= 50 ? '⚠️ WATCH' : '🔴 RISKY';
   const ciBar = ci >= 70 ? '🟢' : ci >= 50 ? '🟡' : '🔴';
-  const warnLine = (t.reasons && t.reasons.length) ? `\n⚠️ <i>${t.reasons.join(' · ')}</i>` : '';
+  const boostLine = t.boost > 0 ? `\n🚀 <b>DexScreener Boosted</b> ×${t.boost}` : '';
+  const mcLine = t.marketCap > 0 ? `\n💰 <b>${fmt(t.marketCap)}</b> mkt cap` : '';
+  const concLine = t.top1 != null ? `\n👥 Top1 <b>${t.top1.toFixed(1)}%</b>  Top3 <b>${t.top3.toFixed(1)}%</b>` : '';
+  const warnLine = t.reasons?.length ? `\n⚠️ <i>${t.reasons.join(' · ')}</i>` : '';
+  const rugVal = t.rugScore != null ? t.rugScore : '?';
+  const rugBar = t.rugScore != null ? bar(t.rugScore) : '▱▱▱▱▱▱▱▱';
 
-  return `${tier} — $${t.symbol}${boostLine}
-${ciBar} <b>Güven: ${ci}/100</b>
+  return `${tier} — <b>$${t.symbol}</b>${boostLine}
 
-🛡 Safety: <b>${t.rugScore}/100</b> | 🎯 Trap: <b>${t.trapScore}/100</b>${mcLine}
-💧 Liq: <b>${fmt(t.liquidity)}</b> | 📈 5dk: <b>+${t.change5m.toFixed(1)}%</b> | ⏱ <b>${t.ageMin}dk</b>${concLine}${warnLine}
-
+${ciBar} <b>${ci}/100</b>  ${bar(ci)}
+━━━━━━━━━━━━━━━━━━━━━
+🛡 Safety   ${bar(rugVal==='?'?50:rugVal)} <b>${rugVal}</b>
+🎯 Trap      ${bar(t.trapScore)} <b>${t.trapScore}</b>
+💧 Liq        <b>${fmt(t.liquidity)}</b>
+📈 5 min    <b>+${t.change5m.toFixed(1)}%</b>
+⏱ Age        <b>${t.ageMin} min</b>${mcLine}${concLine}${warnLine}
+━━━━━━━━━━━━━━━━━━━━━
 <code>${t.address}</code>
 
-⚡ <a href="https://jup.ag/swap/So11111111111111111111111111111111111111112-${t.address}?referrer=ACmAkQLb71nqH4TcbKC6CEHJJz2qPvUAGXJjP8zahfTy&feeBps=30">Al (Jupiter)</a> | 📊 <a href="https://dexscreener.com/solana/${t.address}">Chart</a>
+<a href="https://jup.ag/swap/So11111111111111111111111111111111111111112-${t.address}?referrer=ACmAkQLb71nqH4TcbKC6CEHJJz2qPvUAGXJjP8zahfTy&feeBps=30">⚡ Buy</a>  ·  <a href="https://dexscreener.com/solana/${t.address}">📊 Chart</a>  ·  <a href="https://rugcheck.xyz/tokens/${t.address}">🛡 RugCheck</a>
 
-<i>⚠ Yatırım tavsiyesi değil. DYOR.</i>`;
+<i>Not financial advice · DYOR</i>`;
 }
 
 // ── Boost'lu tokenleri çek (bonus sinyal) ──
@@ -499,16 +518,16 @@ async function scanAndPost() {
 
       // ── İKİ KADEMELİ YÖNLENDİRME ──
       if (confidence >= 70) {
-        // ONAYLI → Premium kanal (anında) + Free grup (gecikmeli)
+        // CONFIRMED → Premium channel (instant) + Free group (delayed)
         await sendTelegram(PREMIUM_CHAT, PREMIUM_THREAD, '⭐ <b>[PREMIUM]</b>\n\n' + msg);
-        console.log(`✅ ONAYLI (${confidence}): $${token.symbol}`);
+        console.log(`✅ CONFIRMED (${confidence}): $${token.symbol}`);
         setTimeout(async () => {
-          await sendTelegram(FREE_CHAT, FREE_THREAD, msg + '\n\n💎 <i>Premium 8 dk önce gördü. Üyelik için: @Solradarapp</i>');
+          await sendTelegram(FREE_CHAT, FREE_THREAD, msg + '\n\n💎 <i>Premium members saw this 8 min early. Join: @Solradarapp</i>');
         }, FREE_DELAY_MS);
       } else {
-        // İZLE (50-69) → sadece Premium kanal, riskli etiketiyle
-        await sendTelegram(WATCH_CHAT, WATCH_THREAD, '👀 <b>[İZLEME — riskli olabilir]</b>\n\n' + msg);
-        console.log(`⚠️ İZLE (${confidence}): $${token.symbol}`);
+        // WATCH (50-69) → Premium channel only, higher risk label
+        await sendTelegram(WATCH_CHAT, WATCH_THREAD, '👀 <b>[WATCHLIST — higher risk]</b>\n\n' + msg);
+        console.log(`⚠️ WATCH (${confidence}): $${token.symbol}`);
       }
     }
 
@@ -561,43 +580,68 @@ function buildPerformanceReport(days = 7) {
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   const recent = signals.filter(s => s.signaledAt >= cutoff && s.entryPrice > 0);
 
-  if (!recent.length) return `📊 Son ${days} günde takip edilen sinyal yok.`;
+  if (!recent.length) return `📊 No tracked signals in the last ${days} days.`;
 
   const total = recent.length;
-  const winners = recent.filter(s => s.maxX >= 2).length;      // 2x+ yapanlar
-  const bigWins = recent.filter(s => s.maxX >= 5).length;      // 5x+ yapanlar
+  const winners = recent.filter(s => s.maxX >= 2).length;
+  const bigWins = recent.filter(s => s.maxX >= 5).length;
   const avgMaxX = (recent.reduce((sum, s) => sum + s.maxX, 0) / total).toFixed(2);
   const best = recent.reduce((a, b) => b.maxX > a.maxX ? b : a, recent[0]);
-
-  // Şu an pozitif/negatif
   const stillUp = recent.filter(s => s.lastPrice > s.entryPrice).length;
   const winRate = ((winners / total) * 100).toFixed(0);
 
-  // En iyi 5
   const top5 = [...recent].sort((a, b) => b.maxX - a.maxX).slice(0, 5)
-    .map(s => `  • $${s.symbol}: <b>${s.maxX}x</b> (giriş $${s.entryPrice < 0.0001 ? s.entryPrice.toExponential(1) : s.entryPrice.toFixed(6)})`)
+    .map(s => `  • $${s.symbol}: <b>${s.maxX}x</b> (entry $${s.entryPrice < 0.0001 ? s.entryPrice.toExponential(1) : s.entryPrice.toFixed(6)})`)
     .join('\n');
 
-  return `📊 <b>PERFORMANS — Son ${days} gün</b>
-<i>(sadece sen görüyorsun)</i>
+  return `📊 <b>PERFORMANCE REPORT — Last ${days} days</b>
+<i>(only visible to you)</i>
 
-Toplam sinyal: <b>${total}</b>
-2x+ yapan: <b>${winners}</b> (%${winRate})
-5x+ yapan: <b>${bigWins}</b>
-Ortalama max: <b>${avgMaxX}x</b>
-Şu an pozitif: <b>${stillUp}/${total}</b>
+Total signals: <b>${total}</b>
+2x+ winners:  <b>${winners}</b> (${winRate}%)
+5x+ winners:  <b>${bigWins}</b>
+Avg peak:      <b>${avgMaxX}x</b>
+Currently up: <b>${stillUp}/${total}</b>
 
-🏆 En iyi: <b>$${best.symbol} ${best.maxX}x</b>
+🏆 Best: <b>$${best.symbol} ${best.maxX}x</b>
 
 <b>Top 5:</b>
 ${top5}
 
-<i>Not: maxX = sinyal sonrası gördüğü en yüksek nokta. Gerçek kullanıcı bunu yakalamamış olabilir.</i>`;
+<i>Note: maxX = peak after signal. Actual user results may differ.</i>`;
+}
+
+// ── /sharex — X'te paylaşmak için hazır istatistik ──
+function buildShareX(days = 7) {
+  const signals = loadSignals();
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const recent = signals.filter(s => s.signaledAt >= cutoff && s.entryPrice > 0);
+  if (!recent.length) return null;
+
+  const total = recent.length;
+  const winners = recent.filter(s => s.maxX >= 2).length;
+  const bigWins = recent.filter(s => s.maxX >= 5).length;
+  const avgMaxX = (recent.reduce((sum, s) => sum + s.maxX, 0) / total).toFixed(1);
+  const best = recent.reduce((a, b) => b.maxX > a.maxX ? b : a, recent[0]);
+  const winRate = ((winners / total) * 100).toFixed(0);
+
+  return `🎯 SOL RADAR — Last ${days}d performance
+
+✅ ${total} signals sent
+📈 2x+ winners: ${winners} (${winRate}%)
+🚀 5x+ winners: ${bigWins}
+📊 Avg peak: ${avgMaxX}x
+🏆 Best: $${best.symbol} ${best.maxX}x
+
+Free signals 👇
+t.me/SolRadar
+
+#Solana #memecoin #crypto`;
 }
 
 // ── Başlat ──
-console.log('🚀 SOL RADAR bot başlatıldı');
-console.log(`Premium kanal: ${PREMIUM_CHAT} | Free grup: ${FREE_CHAT} (thread ${FREE_THREAD})`);
+console.log('🚀 SOL RADAR bot started');
+console.log(`Premium channel: ${PREMIUM_CHAT} | Free group: ${FREE_CHAT} (thread ${FREE_THREAD})`);
 
 pollUpdates();
 scheduleDailyCheck();

@@ -310,7 +310,13 @@ async function getRugData(addr) {
       top1 = list[0] || 0;
       top3 = (list[0] || 0) + (list[1] || 0) + (list[2] || 0);
     }
-    const res = { score, top1, top3, ts: Date.now() };
+
+    // Mint renounced + LP locked kontrolü
+    const mintRenounced = d.mintAuthority === null || d.mintAuthority === 'renounced' || d.mintAuthorityDisabled === true;
+    const freezeRenounced = d.freezeAuthority === null || d.freezeAuthority === 'renounced';
+    const lpLocked = d.markets?.some(m => m.lp?.lpLockedPct > 80) || false;
+
+    const res = { score, top1, top3, mintRenounced, freezeRenounced, lpLocked, ts: Date.now() };
     rugCache.set(addr, res);
     return res;
   } catch { return { score: null, top1: null, top3: null, ts: Date.now(), unavailable: true }; }
@@ -353,13 +359,27 @@ function calcConfidence(d) {
     else                       { score += 0;  reasons.push('rug low'); }
   } else { score += 16; reasons.push('rug data unavailable'); }
 
-  // Holder concentration (max 25) — neutral if unavailable
+  // Holder concentration (max 25) — SIKI eşikler
   if (d.top1 != null) {
-    if (d.top3 <= 20)      score += 25;
-    else if (d.top3 <= 30) { score += 16; reasons.push('top3 medium'); }
-    else if (d.top3 <= 45) { score += 6;  reasons.push('top3 high'); }
-    else                   { score += 0;  reasons.push('concentration risk'); }
+    // HARD REJECT: top1 >10% veya top3 >30% → sinyal gönderme
+    if (d.top1 > 10 || d.top3 > 30) {
+      return { score: 0, reasons: [`hard reject: top1 ${d.top1?.toFixed(0)}% top3 ${d.top3?.toFixed(0)}%`], hardReject: true };
+    }
+    if (d.top3 <= 10)       score += 25;                              // ideal dağılım
+    else if (d.top3 <= 15)  { score += 18; reasons.push('top3 >10%'); }
+    else if (d.top3 <= 20)  { score += 10; reasons.push('top3 >15%'); }
+    else if (d.top3 <= 30)  { score += 3;  reasons.push('top3 >20%'); }
+    // top1 ayrıca kontrol
+    if (d.top1 > 5)         reasons.push(`top1 ${d.top1.toFixed(0)}%`);
   } else { score += 16; }
+
+  // Mint renounced bonus (max 5)
+  if (d.mintRenounced)  score += 3;
+  else if (d.mintRenounced === false) { score -= 10; reasons.push('mint not renounced'); }
+
+  // LP locked bonus (max 5)  
+  if (d.lpLocked) { score += 5; }
+  else reasons.push('LP not locked');
 
   // Follow-through: h1 check (max 20)
   if (d.h1 > 10)      score += 20;
@@ -385,15 +405,11 @@ function calcConfidence(d) {
   else if (vlr >= 0.5)           score += 2;
   else                           reasons.push('low volume');
 
-  // ── VETO: Kritik riskler tavan koyar (iyi kriterler maskelemesin) ──
-  // Holder konsantrasyonu çok yüksekse, başka her şey mükemmel olsa bile ONAYLI olamaz
+  // ── VETO: Kritik riskler tavan koyar ──
   if (d.top1 != null) {
-    if (d.top3 > 40)       score = Math.min(score, 45);  // 3 cüzdan %40+ = dump riski, max 45 (çöp/izle sınırı)
-    else if (d.top3 > 30)  score = Math.min(score, 64);  // %30-40 = en fazla İZLE (70 altı), ONAYLI olamaz
-    if (d.top1 > 20)       score = Math.min(score, 45);  // tek cüzdan %20+ = tehlikeli
-    else if (d.top1 > 15)  score = Math.min(score, 64);  // tek cüzdan %15-20 = en fazla İZLE
+    if (d.top3 > 20)      score = Math.min(score, 55);  // top3 %20+ = max WATCH
+    if (d.top1 > 7)       score = Math.min(score, 55);  // top1 %7+ = max WATCH
   }
-  // h1 negatifse (pump söndü) ONAYLI olamaz
   if (d.h1 <= -10) score = Math.min(score, 45);
   else if (d.h1 < 0) score = Math.min(score, 64);
 
@@ -416,11 +432,18 @@ function formatMessage(t) {
   const warnLine = t.reasons?.length ? `\n⚠️ <i>${t.reasons.slice(0,2).join(' · ')}</i>` : '';
   const boostLine = t.boost > 0 ? ` 🚀×${t.boost}` : '';
 
+  // Güvenlik satırı
+  const mintIcon = t.mintRenounced === true ? '🔒' : t.mintRenounced === false ? '🔓' : '❓';
+  const lpIcon = t.lpLocked === true ? '✅' : '⚠️';
+  const secLine = (t.mintRenounced != null || t.lpLocked != null)
+    ? `\n${mintIcon} Mint  ${lpIcon} LP` : '';
+  const migLine = t.justMigrated ? `\n⚡ <i>Recently migrated from pump.fun — first candles volatile</i>` : '';
+
   return `${tier} — <b>$${t.symbol}</b>${boostLine}
 
 ${ciDot} <b>${ci}</b>  🛡 <b>${rugVal}</b>  🎯 <b>${t.trapScore}</b>  📈 <b>+${t.change5m.toFixed(1)}%</b>
 
-${mcLine}💧 <b>${fmt(t.liquidity)}</b>  ⏱ <b>${t.ageMin}min</b>${concLine}${warnLine}
+${mcLine}💧 <b>${fmt(t.liquidity)}</b>  ⏱ <b>${t.ageMin}min</b>${concLine}${secLine}${warnLine}${migLine}
 
 <code>${t.address}</code>
 <a href="https://jup.ag/swap/So11111111111111111111111111111111111111112-${t.address}?referrer=ACmAkQLb71nqH4TcbKC6CEHJJz2qPvUAGXJjP8zahfTy&feeBps=30">⚡ Buy</a>  ·  <a href="https://dexscreener.com/solana/${t.address}">📊 Chart</a>
@@ -503,19 +526,27 @@ async function scanAndPost() {
       const conc = (rug.top1 != null) ? { top1: rug.top1, top3: rug.top3 } : null;
 
       // ── GÜVEN ENDEKSİ HESAPLA ──
-      const { score: confidence, reasons } = calcConfidence({
+      const { score: confidence, reasons, hardReject } = calcConfidence({
         rugScore, trapScore, h1, liquidity: liq, vol1,
-        top1: conc?.top1 ?? null, top3: conc?.top3 ?? null
+        top1: conc?.top1 ?? null, top3: conc?.top3 ?? null,
+        mintRenounced: conc?.mintRenounced, lpLocked: conc?.lpLocked
       });
+
+      // Hard reject: konsantrasyon limiti aşıldı
+      if (hardReject) { seen.add(addr); console.log(`🚫 Hard reject: $${p.baseToken?.symbol} — ${reasons[0]}`); continue; }
 
       // <40 = çöp, hiç gönderme
       if (confidence < 40) { seen.add(addr); continue; }
 
       seen.add(addr);
-      // Sembol: önce DexScreener baseToken (güvenilir), sonra header — URL/uzun metin gelirse temizle
       let symbol = p.baseToken?.symbol || tk.header || '???';
       if (/^https?:|\/|\s/.test(symbol) || symbol.length > 15) symbol = p.baseToken?.symbol || '???';
       symbol = symbol.replace(/[^A-Za-z0-9_$.]/g, '').slice(0, 15) || '???';
+
+      // Pump.fun → Raydium geçiş tespiti
+      const isPumpFun = p.dexId === 'pump-fun' || p.labels?.includes('pump-fun');
+      const justMigrated = isPumpFun && ageMin < 30;
+
       const token = {
         address: addr,
         symbol,
@@ -525,6 +556,10 @@ async function scanAndPost() {
         marketCap: p.marketCap || p.fdv || 0,
         top1: conc?.top1 ?? null,
         top3: conc?.top3 ?? null,
+        mintRenounced: conc?.mintRenounced ?? null,
+        freezeRenounced: conc?.freezeRenounced ?? null,
+        lpLocked: conc?.lpLocked ?? null,
+        justMigrated,
         confidence,
         reasons
       };

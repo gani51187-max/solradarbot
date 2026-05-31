@@ -1,80 +1,105 @@
 // ═══════════════════════════════════════════════════
-// SOL RADAR — Telegram Sinyal Botu
-// Premium/Free thread desteği + Üyelik yönetimi
+// SOL RADAR — Telegram Signal Bot
 // ═══════════════════════════════════════════════════
 
 const BOT_TOKEN      = process.env.TELEGRAM_BOT_TOKEN || '8969831057:AAHLcE0j3GRwUZ67ehoQg-1eMalOn_BpPEY';
-// Premium: ayrı kapalı kanal | Free: mevcut grup (Topics'li)
-const PREMIUM_CHAT   = process.env.PREMIUM_CHAT || '-1003914359932';  // SolRadar Premium kanalı
-const PREMIUM_THREAD = process.env.PREMIUM_THREAD_ID ? parseInt(process.env.PREMIUM_THREAD_ID) : null; // kanal = thread yok
-const FREE_CHAT      = process.env.FREE_CHAT || '-1003779270396';     // SolRadar grubu
-const FREE_THREAD    = parseInt(process.env.FREE_THREAD_ID || '20');  // Free başlığı
-const WATCH_CHAT     = process.env.WATCH_CHAT || PREMIUM_CHAT;        // İzle sinyalleri → premium kanal
+const PREMIUM_CHAT   = process.env.PREMIUM_CHAT || '-1003914359932';
+const PREMIUM_THREAD = process.env.PREMIUM_THREAD_ID ? parseInt(process.env.PREMIUM_THREAD_ID) : null;
+const FREE_CHAT      = process.env.FREE_CHAT || '-1003779270396';
+const FREE_THREAD    = parseInt(process.env.FREE_THREAD_ID || '20');
+const WATCH_CHAT     = process.env.WATCH_CHAT || PREMIUM_CHAT;
 const WATCH_THREAD   = process.env.WATCH_THREAD_ID ? parseInt(process.env.WATCH_THREAD_ID) : null;
-const ADMIN_ID       = process.env.ADMIN_ID || '421411369';          // Gani'nin Telegram ID'si
+const ADMIN_ID       = process.env.ADMIN_ID || '421411369';
 const FREE_DELAY_MS  = 8 * 60 * 1000;
 
 const fs   = require('fs');
 const http = require('http');
 
+// ── Firebase Admin (Firestore — kalıcı sinyal depolama) ──
+let db = null;
+try {
+  const admin = require('firebase-admin');
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId:   process.env.FIREBASE_PROJECT_ID   || 'solradar-3e7bd',
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL || 'firebase-adminsdk-fbsvc@solradar-3e7bd.iam.gserviceaccount.com',
+        privateKey:  (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
+      })
+    });
+  }
+  db = admin.firestore();
+  console.log('✅ Firebase Firestore connected');
+} catch (e) {
+  console.warn('⚠️ Firebase unavailable, falling back to local signals.json:', e.message);
+}
+
 // ── Üye veritabanı (members.json) ──
 const DB_FILE = './members.json';
 function loadMembers() {
-  try { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } 
+  try { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); }
   catch { return {}; }
 }
-function saveMembers(db) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+function saveMembers(dbObj) {
+  fs.writeFileSync(DB_FILE, JSON.stringify(dbObj, null, 2));
 }
 
-// ── Sinyal performans takibi (signals.json) ──
+// ── Sinyal kaydı (Firestore önce, fallback signals.json) ──
 const SIGNALS_FILE = './signals.json';
-function loadSignals() {
-  try { return JSON.parse(fs.readFileSync(SIGNALS_FILE, 'utf8')); }
-  catch { return []; }
+function loadSignalsLocal() {
+  try { return JSON.parse(fs.readFileSync(SIGNALS_FILE, 'utf8')); } catch { return []; }
 }
-function saveSignals(arr) {
-  fs.writeFileSync(SIGNALS_FILE, JSON.stringify(arr, null, 2));
+function saveSignalsLocal(arr) {
+  try { fs.writeFileSync(SIGNALS_FILE, JSON.stringify(arr, null, 2)); } catch {}
 }
-// Yeni sinyal kaydet
-function recordSignal(token, priceUsd, marketCap) {
-  const signals = loadSignals();
-  signals.push({
-    address: token.address,
-    symbol: token.symbol,
+
+async function recordSignal(token, priceUsd, marketCap) {
+  const signal = {
+    address:    token.address,
+    symbol:     token.symbol,
+    confidence: token.confidence || 0,
+    rugScore:   token.rugScore,
+    trapScore:  token.trapScore,
     entryPrice: priceUsd,
-    entryMC: marketCap,
-    rugScore: token.rugScore,
-    trapScore: token.trapScore,
-    boost: token.boost,
+    entryMC:    marketCap,
     signaledAt: Date.now(),
-    maxPrice: priceUsd,      // gördüğümüz en yüksek fiyat
-    maxX: 1,                 // max kaç X yaptı
-    lastPrice: priceUsd,
-    lastCheck: Date.now()
-  });
-  // Son 200 sinyali tut
-  if (signals.length > 200) signals.shift();
-  saveSignals(signals);
+    maxPrice:   priceUsd,
+    maxX:       1,
+    lastPrice:  priceUsd,
+    lastChecked: Date.now()
+  };
+
+  if (db) {
+    try {
+      await db.collection('signals').add(signal);
+      return;
+    } catch (e) { console.warn('Firestore write error:', e.message); }
+  }
+  // Fallback: local file
+  const arr = loadSignalsLocal();
+  arr.push(signal);
+  if (arr.length > 200) arr.shift();
+  saveSignalsLocal(arr);
+}
+
+async function loadSignals() {
+  if (db) {
+    try {
+      const snap = await db.collection('signals').orderBy('signaledAt','desc').limit(500).get();
+      return snap.docs.map(d => ({ _id: d.id, ...d.data() }));
+    } catch (e) { console.warn('Firestore read error:', e.message); }
+  }
+  return loadSignalsLocal();
 }
 
 // ── FİLTRE AYARLARI ──
 const FILTERS = {
-  minLiquidity: 8000,        // $5K→$8K: tek satış fiyatı az oynatsın (araştırma: <$8K riskli)
-  minRugScore: 85,           // 80→85: daha güvenli
-  minHolders: 100,
-  minChange5m: 15,           // 20→15: aşırı pump anını kovalama, daha sakin giriş
-  maxChange5m: 80,           // YENİ: %80+ 5dk = zaten pump olmuş, geç kalmışsın, atla
-  maxAgeMin: 60,             // 30→60: biraz olgunlaşsın (ilk dakika curve buyer dump'ı geçsin)
-  minAgeMin: 5,              // YENİ: ilk 5dk en manipülatif, atla
+  minLiquidity: 5000,        // $8K→$5K: daha fazla token geçsin
+  minChange5m: 10,           // 15→10: momentum eşiğini düşür
+  maxChange5m: 90,           // 80→90: biraz daha geniş
+  maxAgeMin: 90,             // 60→90: daha fazla token yakalanır
+  minAgeMin: 3,              // 5→3: ilk 3dk sonra bakabilir
   requirePositiveBuyRatio: true,
-  maxTrapDanger: 50,         // 40→50: daha temiz yapı iste
-  // ── Sürdürülebilirlik (pump-dump filtresi) ──
-  maxTopHolderPct: 15,       // YENİ: en büyük holder %15'ten fazlaysa = insider riski, atla
-  maxTop3Pct: 30,            // YENİ: ilk 3 holder toplam %30+ = dump riski, atla
-  minVolLiqRatio: 0.5,       // YENİ: hacim/likidite oranı (sahte hacim filtresi)
-  maxVolLiqRatio: 8,         // YENİ: aşırı hacim/likidite = manipülasyon
-  requireH1Positive: true,   // YENİ: 1 saatlik de pozitif olsun (follow-through teyidi)
 };
 
 const seen = new Set();
@@ -202,7 +227,7 @@ async function handleCommand(msg) {
   if (text.startsWith('/performans') || text.startsWith('/performance')) {
     const parts = text.split(' ');
     const days = parseInt(parts[1]) || 7;
-    const report = buildPerformanceReport(days);
+    const report = await buildPerformanceReport(days);
     await sendTelegram(fromId, null, report);
     return;
   }
@@ -210,7 +235,7 @@ async function handleCommand(msg) {
   // /sharex [days] — X (Twitter) ready stats post
   if (text.startsWith('/sharex')) {
     const days = parseInt(text.split(' ')[1]) || 7;
-    const post = buildShareX(days);
+    const post = await buildShareX(days);
     if (!post) { await sendTelegram(fromId, null, '📊 No signal data yet to share.'); return; }
     await sendTelegram(fromId, null, `📋 <b>Copy &amp; paste to X/Twitter:</b>\n\n<pre>${post}</pre>`);
     return;
@@ -384,29 +409,23 @@ function bar(val, max=100, len=8){
 function formatMessage(t) {
   const ci = t.confidence ?? 0;
   const tier = ci >= 70 ? '✅ CONFIRMED' : ci >= 50 ? '⚠️ WATCH' : '🔴 RISKY';
-  const ciBar = ci >= 70 ? '🟢' : ci >= 50 ? '🟡' : '🔴';
-  const boostLine = t.boost > 0 ? `\n🚀 <b>DexScreener Boosted</b> ×${t.boost}` : '';
-  const mcLine = t.marketCap > 0 ? `\n💰 <b>${fmt(t.marketCap)}</b> mkt cap` : '';
-  const concLine = t.top1 != null ? `\n👥 Top1 <b>${t.top1.toFixed(1)}%</b>  Top3 <b>${t.top3.toFixed(1)}%</b>` : '';
-  const warnLine = t.reasons?.length ? `\n⚠️ <i>${t.reasons.join(' · ')}</i>` : '';
+  const ciDot = ci >= 70 ? '🟢' : ci >= 50 ? '🟡' : '🔴';
   const rugVal = t.rugScore != null ? t.rugScore : '?';
-  const rugBar = t.rugScore != null ? bar(t.rugScore) : '▱▱▱▱▱▱▱▱';
+  const mcLine = t.marketCap > 0 ? `MC: <b>${fmt(t.marketCap)}</b>  ` : '';
+  const concLine = t.top1 != null ? `\n👥 Top1 <b>${t.top1.toFixed(0)}%</b>  Top3 <b>${t.top3.toFixed(0)}%</b>` : '';
+  const warnLine = t.reasons?.length ? `\n⚠️ <i>${t.reasons.slice(0,2).join(' · ')}</i>` : '';
+  const boostLine = t.boost > 0 ? ` 🚀×${t.boost}` : '';
 
   return `${tier} — <b>$${t.symbol}</b>${boostLine}
 
-${ciBar} <b>${ci}/100</b>  ${bar(ci)}
-━━━━━━━━━━━━━━━━━━━━━
-🛡 Safety   ${bar(rugVal==='?'?50:rugVal)} <b>${rugVal}</b>
-🎯 Trap      ${bar(t.trapScore)} <b>${t.trapScore}</b>
-💧 Liq        <b>${fmt(t.liquidity)}</b>
-📈 5 min    <b>+${t.change5m.toFixed(1)}%</b>
-⏱ Age        <b>${t.ageMin} min</b>${mcLine}${concLine}${warnLine}
-━━━━━━━━━━━━━━━━━━━━━
+${ciDot} <b>${ci}</b>  🛡 <b>${rugVal}</b>  🎯 <b>${t.trapScore}</b>  📈 <b>+${t.change5m.toFixed(1)}%</b>
+
+${mcLine}💧 <b>${fmt(t.liquidity)}</b>  ⏱ <b>${t.ageMin}min</b>${concLine}${warnLine}
+
 <code>${t.address}</code>
+<a href="https://jup.ag/swap/So11111111111111111111111111111111111111112-${t.address}?referrer=ACmAkQLb71nqH4TcbKC6CEHJJz2qPvUAGXJjP8zahfTy&feeBps=30">⚡ Buy</a>  ·  <a href="https://dexscreener.com/solana/${t.address}">📊 Chart</a>
 
-<a href="https://jup.ag/swap/So11111111111111111111111111111111111111112-${t.address}?referrer=ACmAkQLb71nqH4TcbKC6CEHJJz2qPvUAGXJjP8zahfTy&feeBps=30">⚡ Buy</a>  ·  <a href="https://dexscreener.com/solana/${t.address}">📊 Chart</a>  ·  <a href="https://rugcheck.xyz/tokens/${t.address}">🛡 RugCheck</a>
-
-<i>Not financial advice · DYOR</i>`;
+<i>DYOR · Not financial advice</i>`;
 }
 
 // ── Boost'lu tokenleri çek (bonus sinyal) ──
@@ -489,8 +508,8 @@ async function scanAndPost() {
         top1: conc?.top1 ?? null, top3: conc?.top3 ?? null
       });
 
-      // <50 = çöp, hiç gönderme
-      if (confidence < 50) { seen.add(addr); continue; }
+      // <40 = çöp, hiç gönderme
+      if (confidence < 40) { seen.add(addr); continue; }
 
       seen.add(addr);
       // Sembol: önce DexScreener baseToken (güvenilir), sonra header — URL/uzun metin gelirse temizle
@@ -514,7 +533,7 @@ async function scanAndPost() {
       // Performans takibi için kaydet
       const entryPrice = p.priceUsd ? parseFloat(p.priceUsd) : 0;
       const entryMC = p.marketCap || p.fdv || 0;
-      recordSignal(token, entryPrice, entryMC);
+      await recordSignal(token, entryPrice, entryMC);
 
       // ── İKİ KADEMELİ YÖNLENDİRME ──
       if (confidence >= 70) {
@@ -539,10 +558,9 @@ async function scanAndPost() {
 
 // ── Sinyal performansını güncelle (her saat) ──
 async function updateSignalPerformance() {
-  const signals = loadSignals();
+  const signals = await loadSignals();
   if (!signals.length) return;
 
-  // Sadece son 7 günün sinyallerini takip et (eskiler dondurulur)
   const active = signals.filter(s => Date.now() - s.signaledAt < 7 * 24 * 60 * 60 * 1000);
   const addrs = [...new Set(active.map(s => s.address))];
 
@@ -557,26 +575,31 @@ async function updateSignalPerformance() {
         const a = p.baseToken?.address;
         if (a && p.priceUsd) priceMap[a] = parseFloat(p.priceUsd);
       });
-      signals.forEach(s => {
+
+      for (const s of active) {
         const cur = priceMap[s.address];
-        if (cur && s.entryPrice > 0) {
-          s.lastPrice = cur;
-          s.lastCheck = Date.now();
-          if (cur > s.maxPrice) {
-            s.maxPrice = cur;
-            s.maxX = +(cur / s.entryPrice).toFixed(2);
-          }
+        if (!cur || s.entryPrice <= 0) continue;
+        const newMaxX = cur > (s.maxPrice || 0) ? +(cur / s.entryPrice).toFixed(2) : s.maxX;
+        const updated = {
+          lastPrice: cur, lastChecked: Date.now(),
+          maxPrice: Math.max(s.maxPrice || 0, cur), maxX: newMaxX
+        };
+        if (db && s._id) {
+          try { await db.collection('signals').doc(s._id).update(updated); } catch {}
+        } else {
+          Object.assign(s, updated);
         }
-      });
+      }
     } catch {}
   }
-  saveSignals(signals);
-  console.log(`📊 Performans güncellendi: ${active.length} aktif sinyal`);
+
+  if (!db) saveSignalsLocal(signals); // fallback only
+  console.log(`📊 Performance updated: ${active.length} active signals`);
 }
 
-// ── Performans özeti oluştur ──
-function buildPerformanceReport(days = 7) {
-  const signals = loadSignals();
+// ── Performans özeti ──
+async function buildPerformanceReport(days = 7) {
+  const signals = await loadSignals();
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   const recent = signals.filter(s => s.signaledAt >= cutoff && s.entryPrice > 0);
 
@@ -612,8 +635,8 @@ ${top5}
 }
 
 // ── /sharex — X'te paylaşmak için hazır istatistik ──
-function buildShareX(days = 7) {
-  const signals = loadSignals();
+async function buildShareX(days = 7) {
+  const signals = await loadSignals();
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   const recent = signals.filter(s => s.signaledAt >= cutoff && s.entryPrice > 0);
   if (!recent.length) return null;

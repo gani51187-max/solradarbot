@@ -1,8 +1,11 @@
 {
   "name": "solradar-telegram-bot",
   "version": "1.0.0",
-  "description": "SOL RADAR otomatik Telegram sinyal botu",
+  "description": "SOL RADAR Telegram signal bot",
   "main": "bot.js",
   "scripts": { "start": "node bot.js" },
-  "engines": { "node": ">=18" }
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
 }

@@ -66,7 +66,8 @@ async function recordSignal(token, priceUsd, marketCap) {
     maxPrice:   priceUsd,
     maxX:       1,
     lastPrice:  priceUsd,
-    lastChecked: Date.now()
+    lastChecked: Date.now(),
+    dipAlerted: false
   };
 
   if (db) {
@@ -101,6 +102,10 @@ const FILTERS = {
   minAgeMin: 3,              // 5→3: ilk 3dk sonra bakabilir
   requirePositiveBuyRatio: true,
 };
+
+// ── PUMP + DÜZELTME UYARISI AYARLARI ──
+const DIP_PUMP_MIN_X    = 2.0;   // girişten en az 2x (+%100) pump yapmış olmalı
+const DIP_FROM_PEAK_PCT = 50;    // zirveden -%50 düşünce uyarı ver
 
 const seen = new Set();
 
@@ -523,7 +528,7 @@ async function scanAndPost() {
       // ── Veri topla (tek RugCheck çağrısı) ──
       const rug = await getRugData(addr);
       const rugScore = rug.score;
-      const conc = (rug.top1 != null) ? { top1: rug.top1, top3: rug.top3 } : null;
+      const conc = (rug.top1 != null) ? { top1: rug.top1, top3: rug.top3, mintRenounced: rug.mintRenounced, freezeRenounced: rug.freezeRenounced, lpLocked: rug.lpLocked } : null;
 
       // ── GÜVEN ENDEKSİ HESAPLA ──
       const { score: confidence, reasons, hardReject } = calcConfidence({
@@ -591,7 +596,7 @@ async function scanAndPost() {
   }
 }
 
-// ── Sinyal performansını güncelle (her saat) ──
+// ── Sinyal performansını güncelle + düzeltme kontrolü (her 15 dk) ──
 async function updateSignalPerformance() {
   const signals = await loadSignals();
   if (!signals.length) return;
@@ -614,11 +619,24 @@ async function updateSignalPerformance() {
       for (const s of active) {
         const cur = priceMap[s.address];
         if (!cur || s.entryPrice <= 0) continue;
-        const newMaxX = cur > (s.maxPrice || 0) ? +(cur / s.entryPrice).toFixed(2) : s.maxX;
+        const newMaxPrice = Math.max(s.maxPrice || 0, cur);
+        const newMaxX = +(newMaxPrice / s.entryPrice).toFixed(2);
         const updated = {
           lastPrice: cur, lastChecked: Date.now(),
-          maxPrice: Math.max(s.maxPrice || 0, cur), maxX: newMaxX
+          maxPrice: newMaxPrice, maxX: newMaxX
         };
+
+        // ── PUMP + DÜZELTME UYARISI ──
+        // Coin girişten en az 2x pump yaptı + şimdi zirveden -%50 düşmüş + daha önce uyarmadıysak
+        const pumpedEnough = newMaxX >= DIP_PUMP_MIN_X;
+        const dipFromPeak = newMaxPrice > 0 ? ((cur - newMaxPrice) / newMaxPrice) * 100 : 0;
+        if (pumpedEnough && dipFromPeak <= -DIP_FROM_PEAK_PCT && !s.dipAlerted) {
+          updated.dipAlerted = true;
+          await sendDipAlert(s, newMaxX, dipFromPeak);
+        }
+        // Yeni zirve yaparsa uyarıyı sıfırla (sonraki büyük düzeltme de yakalanabilsin)
+        if (cur >= newMaxPrice && s.dipAlerted) updated.dipAlerted = false;
+
         if (db && s._id) {
           try { await db.collection('signals').doc(s._id).update(updated); } catch {}
         } else {
@@ -630,6 +648,26 @@ async function updateSignalPerformance() {
 
   if (!db) saveSignalsLocal(signals); // fallback only
   console.log(`📊 Performance updated: ${active.length} active signals`);
+}
+
+// ── Pump sonrası düzeltme uyarısı (WATCH kanalına) ──
+async function sendDipAlert(s, maxX, dipPct) {
+  const msg = `🎯 <b>DÜZELTME FIRSATI — $${s.symbol}</b>
+
+Bu coin sinyal sonrası <b>${maxX}x</b> yaptı, şimdi zirveden <b>%${Math.abs(dipPct).toFixed(0)}</b> düzeltmede.
+
+📉 Giriş: $${s.entryPrice < 0.0001 ? s.entryPrice.toExponential(1) : s.entryPrice.toFixed(6)}
+🔝 Zirve: ${maxX}x
+📊 Şimdi: zirveden -%${Math.abs(dipPct).toFixed(0)}
+
+<code>${s.address}</code>
+<a href="https://jup.ag/swap/So11111111111111111111111111111111111111112-${s.address}?referrer=ACmAkQLb71nqH4TcbKC6CEHJJz2qPvUAGXJjP8zahfTy&feeBps=30">⚡ Buy</a>  ·  <a href="https://dexscreener.com/solana/${s.address}">📊 Chart</a>
+
+⚠️ <i>Düzeltme = fırsat olabilir AMA coin daha da düşebilir. Bu bir AL sinyali değil — kendin incele. DYOR · Not financial advice</i>`;
+  try {
+    await sendTelegram(WATCH_CHAT, WATCH_THREAD, msg);
+    console.log(`🎯 Dip alert: $${s.symbol} (${maxX}x → -${Math.abs(dipPct).toFixed(0)}%)`);
+  } catch (e) { console.warn('Dip alert error:', e.message); }
 }
 
 // ── Performans özeti ──
@@ -705,7 +743,7 @@ pollUpdates();
 scheduleDailyCheck();
 scanAndPost();
 setInterval(scanAndPost, 60 * 1000);
-setInterval(updateSignalPerformance, 60 * 60 * 1000); // her saat performans güncelle
+setInterval(updateSignalPerformance, 15 * 60 * 1000); // her 15 dk performans + düzeltme kontrolü
 setTimeout(updateSignalPerformance, 5 * 60 * 1000);    // ilk güncelleme 5dk sonra
 
 http.createServer((req, res) => {

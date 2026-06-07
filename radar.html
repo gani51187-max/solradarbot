@@ -469,13 +469,18 @@ window.loadStats=async function(){
   return arr;
 };
 const TRIAL_DAYS=3;
+let _authResolved=false;  // ilk başarılı oturum çözümü yapıldı mı
 onAuthStateChanged(auth,async user=>{
   const gate=document.getElementById('gate');
   if(!user){
+    // Kullanıcı bir kez giriş yaptıysa, sonradan gelen geçici "null" durumunu yoksay
+    // (mobil tarayıcılarda iframe/bellek nedeniyle auth bir an düşebiliyor — atma!)
+    if(_authResolved) return;
     document.getElementById('gateMsg').textContent='Giriş gerekli...';
-    setTimeout(()=>location.href='/',1200);
+    setTimeout(()=>{ if(!auth.currentUser) location.href='/'; },1500);
     return;
   }
+  _authResolved=true;
   // Plan + deneme süresi kontrolü
   try{
     const snap=await getDoc(doc(db,'users',user.uid));

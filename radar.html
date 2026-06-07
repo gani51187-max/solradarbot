@@ -172,6 +172,7 @@ body{background:var(--bg);color:var(--text);font-family:'Space Mono',monospace;h
 .wl-title{font-size:9px;letter-spacing:2px;color:var(--muted);}
 .wl-count{font-size:9px;color:var(--accent3);font-weight:700;}
 .wl-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;background:var(--panel2);margin-bottom:4px;cursor:pointer;transition:all .15s;}
+.wl-item.wl-alert{background:rgba(0,255,136,0.12);border:1px solid var(--accent);}
 .wl-item:hover{background:var(--border);}
 .wl-sym{font-size:11px;font-weight:700;flex:1;}
 .wl-del{font-size:10px;color:var(--danger);cursor:pointer;padding:2px 6px;}
@@ -210,10 +211,21 @@ body{background:var(--bg);color:var(--text);font-family:'Space Mono',monospace;h
 /* ── RESPONSIVE ── */
 @media(max-width:1100px){.panels{grid-template-columns:220px 1fr 220px;}}
 @media(max-width:800px){
-  .panels{grid-template-columns:1fr;}
+  .panels{grid-template-columns:1fr;position:relative;}
+  /* varsayılan: sadece feed görünür, detay panelleri gizli */
   .cp,.rp{display:none;}
   .lp{height:100%;}
+  /* detay modu: bir coin seçilince feed gizlenir, analiz+güvenlik görünür */
+  .panels.detail .lp{display:none;}
+  .panels.detail .cp{display:flex;flex-direction:column;height:100%;overflow-y:auto;}
+  .panels.detail .rp{display:block;overflow-y:auto;border-top:1px solid var(--border);}
+  /* mobil geri butonu */
+  #mobBack{display:none;}
+  .panels.detail #mobBack{display:flex;}
 }
+/* geri butonu masaüstünde hep gizli */
+#mobBack{position:sticky;top:0;z-index:50;align-items:center;gap:8px;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 14px;cursor:pointer;color:var(--accent);font-family:'Space Mono',monospace;font-size:12px;font-weight:700;}
+@media(min-width:801px){#mobBack{display:none!important;}}
 
 /* ── GATE ── */
 #gate{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;}
@@ -273,6 +285,7 @@ body{background:var(--bg);color:var(--text);font-family:'Space Mono',monospace;h
 
   <!-- CENTER: Chart + Analysis -->
   <div class="cp">
+    <div id="mobBack" onclick="closeMobDetail()">← Listeye dön</div>
     <div class="cp-head" id="cpHead">
     <div class="cp-sym">$HERMES</div>
     <div class="cp-price">$0.000006186</div>
@@ -447,7 +460,7 @@ body{background:var(--bg);color:var(--text);font-family:'Space Mono',monospace;h
 <script type="module">
 import{initializeApp}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import{getAuth,onAuthStateChanged}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import{getFirestore,collection,getDocs}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import{getFirestore,collection,getDocs,doc,getDoc}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 const cfg={apiKey:"AIzaSyA4u9QQwIHVPA60IvL_gtnyDSJEwldTi6E",authDomain:"solradar-3e7bd.firebaseapp.com",projectId:"solradar-3e7bd",storageBucket:"solradar-3e7bd.firebasestorage.app",messagingSenderId:"862941509006",appId:"1:862941509006:web:aca67286d37d80170d60df"};
 const fb=initializeApp(cfg);const auth=getAuth(fb);const db=getFirestore(fb);
 window.loadStats=async function(){
@@ -455,10 +468,38 @@ window.loadStats=async function(){
   const arr=[];snap.forEach(d=>arr.push(d.data()));
   return arr;
 };
-onAuthStateChanged(auth,user=>{
+const TRIAL_DAYS=3;
+onAuthStateChanged(auth,async user=>{
   const gate=document.getElementById('gate');
-  if(user){gate.style.display='none';}
-  else{document.getElementById('gateMsg').textContent='Giriş gerekli...';setTimeout(()=>location.href='/',1200);}
+  if(!user){
+    document.getElementById('gateMsg').textContent='Giriş gerekli...';
+    setTimeout(()=>location.href='/',1200);
+    return;
+  }
+  // Plan + deneme süresi kontrolü
+  try{
+    const snap=await getDoc(doc(db,'users',user.uid));
+    const d=snap.exists()?snap.data():{};
+    const plan=d.plan||'free';
+    const paid=plan==='pro'||plan==='elite';
+    if(paid){ gate.style.display='none'; return; }  // ücretli → sınırsız
+    // free → deneme süresi dolmuş mu?
+    let created=0;
+    if(d.createdAt){
+      created=d.createdAt.seconds?d.createdAt.seconds*1000:(d.createdAt.toMillis?d.createdAt.toMillis():new Date(d.createdAt).getTime());
+    }
+    const daysUsed=created?(Date.now()-created)/86400000:0;
+    if(created && daysUsed>TRIAL_DAYS){
+      // deneme bitti → kapı
+      document.getElementById('gateMsg').innerHTML='🔒 Ücretsiz '+TRIAL_DAYS+' günlük deneme süren doldu.<br><span style="font-size:12px;opacity:.8;">Sınırsız erişim için PRO\'ya geç.</span><br><a href="/#pricing" style="color:var(--accent);font-size:13px;display:inline-block;margin-top:8px;">→ Planları gör</a>';
+      gate.style.display='flex';
+    }else{
+      gate.style.display='none';  // deneme devam ediyor
+    }
+  }catch(e){
+    // hata olursa kullanıcıyı kilitleme, içeri al (deneme lehine)
+    gate.style.display='none';
+  }
 });
 </script>
 
@@ -486,8 +527,7 @@ function setTab(t){
   currentTab=t;
   ['feed','scan','tweet'].forEach(x=>{document.getElementById('tab'+x.charAt(0).toUpperCase()+x.slice(1)).classList.toggle('active',x===t);});
   document.getElementById('scanBar').style.display=t==='scan'?'flex':'none';
-  document.getElementById('scanCounter').style.display=t==='scan'?'block':'none';
-  if(t==='scan')updateScanCounter();
+  document.getElementById('scanCounter').style.display='none';
   document.getElementById('tweetBar').style.display=t==='tweet'?'block':'none';
   document.getElementById('filtBar').style.display=t==='feed'?'flex':'none';
 }
@@ -629,13 +669,30 @@ function applyF(){
 }
 
 // ── CONFIDENCE SCORE ──
+// ── SOSYAL VARLIK SKORU ──
+// Dexscreener info.socials + info.websites'ten coinin sosyal varlığını ölçer.
+// Not: takipçi/sentiment DEĞİL — sadece link varlığı (ciddiyet göstergesi).
+function calcSocial(p){
+  const socials=p?.info?.socials||[];
+  const websites=p?.info?.websites||[];
+  const types=socials.map(s=>(s.type||s.platform||'').toLowerCase());
+  const hasTwitter=types.some(t=>t.includes('twitter')||t.includes('x'));
+  const hasTelegram=types.some(t=>t.includes('telegram'));
+  const hasWebsite=websites.length>0||types.some(t=>t.includes('website'));
+  const count=(hasTwitter?1:0)+(hasTelegram?1:0)+(hasWebsite?1:0);
+  return{hasTwitter,hasTelegram,hasWebsite,count};
+}
+
 function calcCI(t){
   let s=0;
   if(t.rugScore!=null)s+=t.rugScore<=10?25:t.rugScore<=20?20:t.rugScore<=40?12:0;else s+=16;
   s+=t.trapScore>=80?15:t.trapScore>=60?10:t.trapScore>=40?5:0;
   if((t.change1h||0)>10)s+=20;else if((t.change1h||0)>0)s+=14;else if((t.change1h||0)>-10)s+=5;
   if(t.liquidity>=30000)s+=10;else if(t.liquidity>=15000)s+=7;else if(t.liquidity>=8000)s+=4;
-  s+=16; // holder neutral
+  s+=10; // holder neutral (sosyal için yer açıldı)
+  // sosyal varlık katkısı (max 6)
+  const soc=t.social||{count:0};
+  s+=soc.count>=3?6:soc.count===2?4:soc.count===1?2:0;
   const vlr=t.liquidity>0?(t.volume1h||0)/t.liquidity:0;
   s+=vlr>=1&&vlr<=6?5:vlr>=0.4?3:0;
   return Math.min(100,Math.round(s));
@@ -704,6 +761,7 @@ async function loadFeed(manual=false){
         buys,sells,buyRok:buys>sells,ageMin,
         rugScore:null,trapScore:calcTrapScore(trapR),traps:trapR.traps,signals:trapR.signals,
         mintRenounced:null,freezeRenounced:null,lpLocked:null,
+        social:p?calcSocial(p):{count:0,hasTwitter:false,hasTelegram:false,hasWebsite:false},
         rawDex:p
       };
     }).filter(t=>t.liquidity>2000);
@@ -827,11 +885,16 @@ function renderFeed(){
 }
 
 // ── SELECT TOKEN ──
+function closeMobDetail(){
+  document.querySelector('.panels')?.classList.remove('detail');
+}
 function selectToken(addr){
   const t=rawFeed.find(x=>x.address===addr);
   if(!t)return;
   selectedToken=t;
   const ci=calcCI(t);
+  // Mobilde detay moduna geç (feed gizlenir, analiz açılır)
+  document.querySelector('.panels')?.classList.add('detail');
 
   // Highlight in list
   document.querySelectorAll('.tk').forEach(el=>el.classList.remove('sel'));
@@ -853,6 +916,7 @@ function selectToken(addr){
   document.getElementById('cpPlaceholder').style.display='none';
   const iframe=document.getElementById('cpChart');
   if(t.pool){
+    iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
     iframe.src=`https://dexscreener.com/solana/${t.pool}?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=5`;
     iframe.onerror=()=>setView('anal');
     const _timeoutAddr=addr;
@@ -1017,6 +1081,7 @@ function renderRugSection(t, d){
       {label: t.lpBurned?'LP Yakılmış 🔥':'LP Yakılmamış', ok:t.lpBurned, na:t.lpBurned==null},
       {label: (t.insiders!=null?`Insider: ${t.insiders}`:'Insider'), ok:(t.insiders!=null&&t.insiders===0), na:t.insiders==null},
       {label: (t.lpProviders!=null?`LP Sağlayıcı: ${t.lpProviders}`:'LP Sağlayıcı'), ok:(t.lpProviders!=null&&t.lpProviders>=3), na:t.lpProviders==null},
+      {label: `Sosyal: ${t.social?.count||0}/3 ${t.social?.hasTwitter?'𝕏':''}${t.social?.hasTelegram?' TG':''}${t.social?.hasWebsite?' Web':''}`, ok:(t.social?.count||0)>=2, na:false},
     ];
     const rugHTML=rugItems.map(s=>`<div class="sec-item ${s.na?'na':s.ok?'ok':'fail'}">
       <span>${s.na?'❓':s.ok?'✅':'❌'}</span>
@@ -1098,7 +1163,13 @@ function toggleWatch(){
   if(!selectedToken)return;
   const i=watchlist.findIndex(w=>w.address===selectedToken.address);
   if(i>=0)watchlist.splice(i,1);
-  else watchlist.push({address:selectedToken.address,symbol:selectedToken.symbol});
+  else watchlist.push({
+    address:selectedToken.address,symbol:selectedToken.symbol,
+    entryPrice:selectedToken.price||0,
+    peakPrice:selectedToken.price||0,
+    addedAt:Date.now(),
+    alerted:false
+  });
   localStorage.setItem(WKEY,JSON.stringify(watchlist));
   updateWatchBtn();renderWatchlist();
 }
@@ -1113,40 +1184,53 @@ function renderWatchlist(){
   const list=document.getElementById('wlList');
   cnt.textContent=watchlist.length;
   if(!watchlist.length){list.innerHTML='<div class="wl-empty">Liste boş</div>';return;}
-  list.innerHTML=watchlist.map(w=>`<div class="wl-item" onclick="selectFromWatch('${w.address}')">
-    <div class="wl-sym">$${w.symbol}</div>
+  list.innerHTML=watchlist.map(w=>`<div class="wl-item${w.alerted?' wl-alert':''}" onclick="selectFromWatch('${w.address}')">
+    <div class="wl-sym">$${w.symbol}${w.alerted?' 🎯':''}</div>
     <div class="wl-del" onclick="event.stopPropagation();delWatch('${w.address}')">✕</div>
   </div>`).join('');
 }
 function selectFromWatch(addr){const t=rawFeed.find(x=>x.address===addr);if(t)selectToken(addr);}
 function delWatch(addr){watchlist=watchlist.filter(w=>w.address!==addr);localStorage.setItem(WKEY,JSON.stringify(watchlist));renderWatchlist();}
+
+// ── AKILLI TAKİP: pump + düzeltme uyarısı ──
+const WL_PUMP_MIN=100;   // girişten en az +%100 (2x) pump yapmış olmalı
+const WL_DIP_FROM_PEAK=50;  // zirveden -%50 düzeltme → uyarı
+async function checkWatchlist(){
+  if(!watchlist.length)return;
+  for(const w of watchlist){
+    try{
+      const r=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${w.address}`);
+      if(!r.ok)continue;
+      const d=await r.json();
+      const p=(d.pairs||[]).find(x=>x.chainId==='solana')||d.pairs?.[0];
+      const price=p?.priceUsd?parseFloat(p.priceUsd):0;
+      if(!price)continue;
+      if(!w.entryPrice||w.entryPrice<=0)w.entryPrice=price;
+      if(price>(w.peakPrice||0)){w.peakPrice=price;w.alerted=false;}  // yeni zirve → alert sıfırla
+      const pumpPct=((w.peakPrice-w.entryPrice)/w.entryPrice)*100;
+      const dipPct=((price-w.peakPrice)/w.peakPrice)*100;
+      // pump yapmış + şimdi düzeltmede + daha önce uyarmadıysak
+      if(pumpPct>=WL_PUMP_MIN && dipPct<=-WL_DIP_FROM_PEAK && !w.alerted){
+        w.alerted=true;
+        showWatchAlert(w.symbol, pumpPct, dipPct);
+      }
+    }catch{}
+  }
+  localStorage.setItem(WKEY,JSON.stringify(watchlist));
+}
+function showWatchAlert(sym,pump,dip){
+  showRadarToast(`🎯 $${sym}: +%${pump.toFixed(0)} pump sonrası zirveden %${Math.abs(dip).toFixed(0)} düzeltmede — incele!`);
+  // watchlist'te görsel işaret
+  renderWatchlist();
+}
+setInterval(checkWatchlist, 30000);  // 30 saniyede bir kontrol
 function copyAddr(){if(!selectedToken)return;navigator.clipboard.writeText(selectedToken.address).catch(()=>{});document.querySelector('.addr-copy').textContent='KOPYALANDI';}
 
 // ── MANUAL SCAN ──
 // ── ÜCRETSİZ TARAMA LİMİTİ (günde 3) ──
-const SCAN_LIMIT=3;
-const SCANKEY='sr5_scans';
-function getScanInfo(){
-  const today=new Date().toISOString().slice(0,10);
-  let d={};try{d=JSON.parse(localStorage.getItem(SCANKEY)||'{}');}catch{}
-  if(d.date!==today)d={date:today,count:0};
-  return d;
-}
-function bumpScan(){
-  const d=getScanInfo();d.count++;
-  localStorage.setItem(SCANKEY,JSON.stringify(d));
-  return d.count;
-}
-function scansLeft(){return Math.max(0,SCAN_LIMIT-getScanInfo().count);}
-
 async function doScan(){
   const raw=document.getElementById('scanInput').value.trim();
   if(!raw)return;
-  // limit kontrolü
-  if(scansLeft()<=0){
-    document.getElementById('feedList').innerHTML='<div class="lp-empty" style="line-height:1.8;">🔒 Günlük ücretsiz tarama hakkın doldu (3/3).<br><span style="color:var(--muted);font-size:10px;">Sınırsız tarama için PRO\'ya geç.</span><br><a href="/#pricing" style="color:var(--accent);font-size:11px;">→ Planları gör</a></div>';
-    return;
-  }
   const feedList=document.getElementById('feedList');
   feedList.innerHTML='<div class="lp-empty"><div class="lp-spin"></div><span>Tarıyor...</span></div>';
   try{
@@ -1156,25 +1240,18 @@ async function doScan(){
     const d=await r.json();
     const p=(d.pairs||[]).find(x=>x.chainId==='solana')||d.pairs?.[0];
     if(!p){feedList.innerHTML='<div class="lp-empty">⚠ Veri yok</div>';return;}
-    // başarılı tarama → sayacı artır
-    const used=bumpScan();
     const trapR=detectTrapsQuick(p);
     const t={address:addr,pool:p.pairAddress||null,symbol:p.baseToken?.symbol||'???',name:p.baseToken?.name||'',
       icon:p.info?.imageUrl||null,liquidity:p.liquidity?.usd||0,price:p.priceUsd?parseFloat(p.priceUsd):null,
       change5m:p.priceChange?.m5||0,change1h:p.priceChange?.h1||0,marketCap:p.marketCap||p.fdv||0,
       volume1h:p.volume?.h1||0,buys:p.txns?.m5?.buys||0,sells:p.txns?.m5?.sells||0,
       buyRok:(p.txns?.m5?.buys||0)>(p.txns?.m5?.sells||0),ageMin:p.pairCreatedAt?Math.floor((Date.now()-p.pairCreatedAt)/60000):999,
-      rugScore:null,trapScore:calcTrapScore(trapR),traps:trapR.traps,signals:trapR.signals,rawDex:p};
+      rugScore:null,trapScore:calcTrapScore(trapR),traps:trapR.traps,signals:trapR.signals,social:calcSocial(p),rawDex:p};
     rawFeed=[t,...rawFeed.filter(x=>x.address!==addr)];
     filtFeed=[t,...filtFeed.filter(x=>x.address!==addr)];
     renderFeed();
     selectToken(addr);
-    updateScanCounter();
   }catch(e){feedList.innerHTML=`<div class="lp-empty">⚠ ${e.message}</div>`;}
-}
-function updateScanCounter(){
-  const el=document.getElementById('scanCounter');
-  if(el)el.textContent=`Bugün kalan ücretsiz tarama: ${scansLeft()}/${SCAN_LIMIT}`;
 }
 async function resolveTicker(ticker){
   try{const r=await fetch(`https://api.dexscreener.com/latest/dex/search?q=${ticker}`);const d=await r.json();const p=(d.pairs||[]).find(x=>x.chainId==='solana');return p?.baseToken?.address||null;}catch{return null;}

@@ -95,11 +95,11 @@ async function loadSignals() {
 
 // ── FİLTRE AYARLARI ──
 const FILTERS = {
-  minLiquidity: 5000,        // $8K→$5K: daha fazla token geçsin
-  minChange5m: 10,           // 15→10: momentum eşiğini düşür
-  maxChange5m: 90,           // 80→90: biraz daha geniş
-  maxAgeMin: 90,             // 60→90: daha fazla token yakalanır
-  minAgeMin: 3,              // 5→3: ilk 3dk sonra bakabilir
+  minLiquidity: 30000,       // $30K: rug/likidite çekme riskini ciddi azaltır
+  minChange5m: 10,           // momentum eşiği
+  maxChange5m: 90,           // aşırı pump'ı ele
+  maxAgeMin: 360,            // 6 saate kadar (daha oturmuş coinler)
+  minAgeMin: 60,             // en az 1 saat (ilk çılgın/manipülatif saati atla)
   requirePositiveBuyRatio: true,
 };
 
@@ -518,7 +518,7 @@ async function scanAndPost() {
       const trapScore = calcTrapScore(p);
 
       // ── ÖN ELEME (sadece çöp/spam, gerisi skorlanır) ──
-      if (liq < 3000) continue;                        // çok düşük likidite = çöp
+      if (liq < FILTERS.minLiquidity) continue;        // likidite eşiği (rug koruması)
       if (m5 < FILTERS.minChange5m) continue;          // momentum yok
       if (m5 > FILTERS.maxChange5m) continue;          // aşırı pump = geç kaldın
       if (ageMin > FILTERS.maxAgeMin) continue;        // çok eski
@@ -540,8 +540,8 @@ async function scanAndPost() {
       // Hard reject: konsantrasyon limiti aşıldı
       if (hardReject) { seen.add(addr); console.log(`🚫 Hard reject: $${p.baseToken?.symbol} — ${reasons[0]}`); continue; }
 
-      // <40 = çöp, hiç gönderme
-      if (confidence < 40) { seen.add(addr); continue; }
+      // <70 = yeterince güvenli değil, gönderme (rug oranını düşürmek için sadece CONFIRMED)
+      if (confidence < 70) { seen.add(addr); console.log(`⏭️ Atlandı (CI ${confidence}): $${p.baseToken?.symbol}`); continue; }
 
       seen.add(addr);
       let symbol = p.baseToken?.symbol || tk.header || '???';
@@ -575,19 +575,12 @@ async function scanAndPost() {
       const entryMC = p.marketCap || p.fdv || 0;
       await recordSignal(token, entryPrice, entryMC);
 
-      // ── İKİ KADEMELİ YÖNLENDİRME ──
-      if (confidence >= 70) {
-        // CONFIRMED → Premium channel (instant) + Free group (delayed)
-        await sendTelegram(PREMIUM_CHAT, PREMIUM_THREAD, '⭐ <b>[PREMIUM]</b>\n\n' + msg);
-        console.log(`✅ CONFIRMED (${confidence}): $${token.symbol}`);
-        setTimeout(async () => {
-          await sendTelegram(FREE_CHAT, FREE_THREAD, msg + '\n\n💎 <i>Premium members saw this 8 min early. Join: @Solradarapp</i>');
-        }, FREE_DELAY_MS);
-      } else {
-        // WATCH (50-69) → Premium channel only, higher risk label
-        await sendTelegram(WATCH_CHAT, WATCH_THREAD, '👀 <b>[WATCHLIST — higher risk]</b>\n\n' + msg);
-        console.log(`⚠️ WATCH (${confidence}): $${token.symbol}`);
-      }
+      // ── SADECE CONFIRMED (CI≥70) → Premium (anında) + Free (gecikmeli) ──
+      await sendTelegram(PREMIUM_CHAT, PREMIUM_THREAD, '⭐ <b>[PREMIUM]</b>\n\n' + msg);
+      console.log(`✅ CONFIRMED (${confidence}): $${token.symbol}`);
+      setTimeout(async () => {
+        await sendTelegram(FREE_CHAT, FREE_THREAD, msg + '\n\n💎 <i>Premium members saw this 8 min early. Join: @Solradarapp</i>');
+      }, FREE_DELAY_MS);
     }
 
     if (seen.size > 500) seen.clear();

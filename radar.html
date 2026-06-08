@@ -173,6 +173,7 @@ body{background:var(--bg);color:var(--text);font-family:'Space Mono',monospace;h
 .wl-count{font-size:9px;color:var(--accent3);font-weight:700;}
 .wl-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;background:var(--panel2);margin-bottom:4px;cursor:pointer;transition:all .15s;}
 .wl-item.wl-alert{background:rgba(0,255,136,0.12);border:1px solid var(--accent);}
+.tk-boost{font-size:9px;background:rgba(255,217,61,0.18);color:var(--warn);padding:1px 4px;border-radius:4px;margin-left:4px;}
 .wl-item:hover{background:var(--border);}
 .wl-sym{font-size:11px;font-weight:700;flex:1;}
 .wl-del{font-size:10px;color:var(--danger);cursor:pointer;padding:2px 6px;}
@@ -727,10 +728,33 @@ function calcTrapScore(q){
 }
 
 // ── FEED LOADING ──
+// ── BOOST (Dexscreener ücretli öne çıkarma = ilgi göstergesi) ──
+let boostMap={};
+async function refreshBoosts(){
+  try{
+    const r=await fetch('https://api.dexscreener.com/token-boosts/top/v1');
+    if(!r.ok)return;
+    const d=await r.json();
+    const m={};
+    (Array.isArray(d)?d:d.data||[]).forEach(b=>{
+      if(b.chainId==='solana'&&b.tokenAddress)m[b.tokenAddress]=b.totalAmount||b.amount||1;
+    });
+    boostMap=m;
+  }catch{}
+}
+
+// ── İŞLEM AKTİVİTESİ (1 saatlik toplam işlem = momentum vekili) ──
+function calcActivity(p){
+  const t=p?.txns?.h1||{};
+  const total=(t.buys||0)+(t.sells||0);
+  return total;
+}
+
 async function loadFeed(manual=false){
   if(feedBusy&&!manual)return;
   feedBusy=true;
   if(manual)document.getElementById('feedList').innerHTML='<div class="lp-empty"><div class="lp-spin"></div></div>';
+  await refreshBoosts();
   try{
     const res=await fetch('https://api.dexscreener.com/token-profiles/latest/v1');
     if(!res.ok)throw new Error('DexScreener hata');
@@ -767,6 +791,8 @@ async function loadFeed(manual=false){
         rugScore:null,trapScore:calcTrapScore(trapR),traps:trapR.traps,signals:trapR.signals,
         mintRenounced:null,freezeRenounced:null,lpLocked:null,
         social:p?calcSocial(p):{count:0,hasTwitter:false,hasTelegram:false,hasWebsite:false},
+        boost:boostMap[t.tokenAddress]||0,
+        activity:p?calcActivity(p):0,
         rawDex:p
       };
     }).filter(t=>t.liquidity>2000);
@@ -870,9 +896,11 @@ function renderFeed(){
       {ok:buyOk,label:'Buy>Sell'},
     ].map(c=>`<span class="tk-badge ${c.ok?'cok':'cfail'}">${c.ok?'✓':'✗'} ${c.label}</span>`).join('');
     const sel=selectedToken?.address===t.address?'sel':'';
+    const boostBadge=t.boost>0?`<span class="tk-boost" title="Dexscreener boost (ilgi)">🚀${t.boost>1?'×'+t.boost:''}</span>`:'';
+    const actHot=t.activity>=300?'🔥':t.activity>=100?'⚡':'';
     return`<div class="tk ${tier} ${sel} ${isNew?'new-signal':''} fadein" onclick="selectToken('${t.address}')">
       <div class="tk-top">
-        <div class="tk-sym">$${t.symbol}</div>
+        <div class="tk-sym">$${t.symbol} ${boostBadge}${actHot}</div>
         <div class="tk-ci ${ciCls}">${ci}</div>
       </div>
       <div class="tk-name">${t.name||''}</div>
@@ -899,7 +927,8 @@ function selectToken(addr){
   selectedToken=t;
   const ci=calcCI(t);
   // Mobilde detay moduna geç (feed gizlenir, analiz açılır)
-  document.querySelector('.panels')?.classList.add('detail');
+  var _p=document.querySelector('.panels');
+  if(_p)_p.classList.add('detail');
 
   // Highlight in list
   document.querySelectorAll('.tk').forEach(el=>el.classList.remove('sel'));
@@ -974,6 +1003,8 @@ function selectToken(addr){
       <div class="a-title">VOLUME</div>
       <div class="a-row"><span>Volume (1h)</span><span class="v">${fmt(t.volume1h)}</span></div>
       <div class="a-row"><span>Buys / Sells (5m)</span><span class="v">${t.buys} / ${t.sells}</span></div>
+      <div class="a-row"><span>İşlem (1s) ${t.activity>=300?'🔥':t.activity>=100?'⚡':''}</span><span class="v">${t.activity||0}</span></div>
+      <div class="a-row"><span>Boost ${t.boost>0?'🚀':''}</span><span class="v">${t.boost>0?(t.boost>1?'×'+t.boost:'Var'):'—'}</span></div>
     </div>
     <div id="rugSection"></div>`;
 
@@ -1251,7 +1282,7 @@ async function doScan(){
       change5m:p.priceChange?.m5||0,change1h:p.priceChange?.h1||0,marketCap:p.marketCap||p.fdv||0,
       volume1h:p.volume?.h1||0,buys:p.txns?.m5?.buys||0,sells:p.txns?.m5?.sells||0,
       buyRok:(p.txns?.m5?.buys||0)>(p.txns?.m5?.sells||0),ageMin:p.pairCreatedAt?Math.floor((Date.now()-p.pairCreatedAt)/60000):999,
-      rugScore:null,trapScore:calcTrapScore(trapR),traps:trapR.traps,signals:trapR.signals,social:calcSocial(p),rawDex:p};
+      rugScore:null,trapScore:calcTrapScore(trapR),traps:trapR.traps,signals:trapR.signals,social:calcSocial(p),boost:boostMap[addr]||0,activity:calcActivity(p),rawDex:p};
     rawFeed=[t,...rawFeed.filter(x=>x.address!==addr)];
     filtFeed=[t,...filtFeed.filter(x=>x.address!==addr)];
     renderFeed();

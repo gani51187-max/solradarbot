@@ -213,16 +213,24 @@ body{background:var(--bg);color:var(--text);font-family:'Space Mono',monospace;h
 @media(max-width:1100px){.panels{grid-template-columns:220px 1fr 220px;}}
 @media(max-width:800px){
   .panels{grid-template-columns:1fr;position:relative;}
-  /* varsayılan: sadece feed görünür, detay panelleri gizli */
   .cp,.rp{display:none;}
   .lp{height:100%;}
-  /* detay modu: bir coin seçilince feed gizlenir, analiz+güvenlik görünür */
   .panels.detail .lp{display:none;}
   .panels.detail .cp{display:flex;flex-direction:column;height:100%;overflow-y:auto;}
   .panels.detail .rp{display:block;overflow-y:auto;border-top:1px solid var(--border);}
-  /* mobil geri butonu */
   #mobBack{display:none;}
   .panels.detail #mobBack{display:flex;}
+  /* Mobil: 2 sütun grid */
+  .mc-grid{grid-template-columns:1fr 1fr!important;}
+  .sec-grid{grid-template-columns:1fr 1fr!important;}
+  /* Mobil: güven skoru daha büyük */
+  .ci-score{font-size:56px!important;}
+  .cp-ci-row{padding:12px 12px 10px!important;}
+  /* Mobil: kart değerleri biraz küçüt */
+  .mc-v{font-size:14px!important;}
+  .rp-metrics{padding:10px 12px!important;}
+  .rp-actions{padding:12px 12px 10px!important;}
+  .btn-buy{padding:14px!important;font-size:13px!important;}
 }
 /* geri butonu masaüstünde hep gizli */
 #mobBack{position:sticky;top:0;z-index:50;align-items:center;gap:8px;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 14px;cursor:pointer;color:var(--accent);font-family:'Space Mono',monospace;font-size:12px;font-weight:700;}
@@ -555,9 +563,21 @@ function setView(v){
   }
   if(v==='chart'){
     if(selectedToken?.pool){
+      // Lazy load — sadece şimdi yükle, token seçiminde değil
+      if(!iframe.src||!iframe.src.includes(selectedToken.pool)){
+        iframe.src=`https://dexscreener.com/solana/${selectedToken.pool}?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=5`;
+      }
       iframe.style.display='block';
     } else {
       anal.style.display='block';
+      currentView='anal';
+      document.getElementById('vt-anal').classList.add('active');
+      document.getElementById('vt-chart').classList.remove('active');
+    }
+  } else {
+    anal.style.display='block';
+  }
+}
       currentView='anal';
       document.getElementById('vt-anal').classList.add('active');
       document.getElementById('vt-chart').classList.remove('active');
@@ -946,18 +966,12 @@ function selectToken(addr){
       <a href="https://dexscreener.com/solana/${addr}" target="_blank" class="cp-link">📊 DEX</a>
     </div>`;
 
-  // Chart iframe
+  // Chart iframe — lazy load (setView('chart') tıklanınca yüklenir)
   document.getElementById('cpPlaceholder').style.display='none';
   const iframe=document.getElementById('cpChart');
+  iframe.src='about:blank'; // önceki tokeni sıfırla
   if(t.pool){
     iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
-    iframe.src=`https://dexscreener.com/solana/${t.pool}?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=5`;
-    iframe.onerror=()=>setView('anal');
-    const _timeoutAddr=addr;
-    setTimeout(()=>{
-      if(selectedToken?.address!==_timeoutAddr)return; // başka token seçildiyse iptal
-      try{if(currentView==='chart'&&(!iframe.contentWindow||iframe.contentWindow.location.href==='about:blank'))setView('anal');}catch{setView('anal');}
-    },4000);
   }
   // Chart butonu: pool yoksa disabled göster
   const chartBtn=document.getElementById('vt-chart');

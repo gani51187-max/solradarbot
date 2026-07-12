@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════
-// SOL RADAR — Telegram Signal Bot
+// SOL RADAR
 // ═══════════════════════════════════════════════════
 
+const { handleActivate } = require('./activation');
 const BOT_TOKEN      = process.env.TELEGRAM_BOT_TOKEN || '8969831057:AAHLcE0j3GRwUZ67ehoQg-1eMalOn_BpPEY';
 const PREMIUM_CHAT   = process.env.PREMIUM_CHAT || '-1003914359932';
 const PREMIUM_THREAD = process.env.PREMIUM_THREAD_ID ? parseInt(process.env.PREMIUM_THREAD_ID) : null;
@@ -229,6 +230,10 @@ async function handleCommand(msg) {
   }
 
   // /performans — performance report (admin only)
+  if (text.startsWith('/activate')) {
+  await handleActivate(fromId, text);
+  return;
+}
   if (text.startsWith('/performans') || text.startsWith('/performance')) {
     const parts = text.split(' ');
     const days = parseInt(parts[1]) || 7;

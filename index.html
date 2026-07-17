@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOL RADAR — Solana Token İstihbarat Platformu</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap');
+
+:root {
+  --bg: #050810;
+  --panel: #0b0f1e;
+  --panel2: #0e1326;
+  --border: #1a2035;
+  --accent: #00ff88;
+  --accent2: #ff3c6e;
+  --accent3: #ffd93d;
+  --accent4: #00b4ff;
+  --text: #e6e9f2;
+  --muted: #6b7388;
+  --safe: #00ff88;
+  --warn: #ffd93d;
+  --danger: #ff3c6e;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  overflow-x: hidden;
+}
+
+/* GRID BG */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,255,136,.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,136,.022) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(circle at 50% 30%, #000 0%, transparent 75%);
+  mask-image: radial-gradient(circle at 50% 30%, #000 0%, transparent 75%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* GRAIN OVERLAY (premium doku) */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: .035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* GLOW ORB — çok katmanlı atmosfer */
+.glow-orb {
+  position: fixed;
+  width: 720px; height: 720px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,255,136,.08) 0%, transparent 70%);
+  pointer-events: none;
+  top: -240px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 0;
+  filter: blur(20px);
+}
+.glow-orb::before {
+  content: '';
+  position: absolute;
+  width: 480px; height: 480px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,180,255,.07) 0%, transparent 70%);
+  top: 180px; left: -120px;
+}
+.glow-orb::after {
+  content: '';
+  position: absolute;
+  width: 420px; height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124,77,255,.06) 0%, transparent 70%);
+  top: 120px; right: -100px;
+}
+
+/* ─── NAV ─── */
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(5,8,16,.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-logo {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: 4px;
+  color: var(--accent);
+  text-shadow: 0 0 16px rgba(0,255,136,.4);
+  text-decoration: none;
+}
+.nav-logo span { color: var(--text); }
+.nav-links {
+  display: flex;
+  gap: 24px;
+  margin-left: auto;
+  align-items: center;
+}
+.nav-links a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 11px;
+  letter-spacing: 2px;
+  transition: color .2s;
+}
+.nav-links a:hover { color: var(--text); }
+.nav-btn {
+  background: var(--accent);
+  color: var(--bg) !important;
+  padding: 8px 18px;
+  border-radius: 3px;
+  font-weight: 700;
+  font-size: 10px !important;
+  letter-spacing: 2px;
+  transition: all .2s !important;
+}
+.nav-btn:hover { background: #00cc70 !important; transform: translateY(-1px); }
+@media(max-width:600px){
+  .nav-links { gap: 12px; }
+  .nav-links a:not(.nav-btn) { display: none; }
+}
+
+/* ─── SECTIONS ─── */
+section { position: relative; z-index: 1; }
+
+/* ─── HERO ─── */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 120px 24px 80px;
+}
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0,255,136,.08);
+  border: 1px solid rgba(0,255,136,.25);
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--accent);
+  margin-bottom: 32px;
+}
+.badge-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  animation: bpulse 1.5s infinite;
+}
+@keyframes bpulse { 0%,100%{opacity:1}50%{opacity:.3} }
+
+.hero h1 {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: clamp(36px, 6vw, 72px);
+  line-height: 1.1;
+  margin-bottom: 24px;
+  letter-spacing: -1px;
+}
+.hero h1 .green { color: var(--accent); }
+.hero h1 .dim { color: var(--muted); }
+
+.hero-sub {
+  font-size: clamp(12px, 2vw, 15px);
+  color: var(--muted);
+  max-width: 560px;
+  line-height: 1.8;
+  margin-bottom: 40px;
+}
+
+.hero-btns {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 64px;
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+  padding: 14px 32px;
+  border: none;
+  border-radius: 3px;
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all .2s;
+  text-decoration: none;
+  display: inline-block;
+}
+.btn-primary:hover { background: #00cc70; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,255,136,.2); }
+.btn-secondary {
+  background: transparent;
+  color: var(--text);
+  padding: 14px 32px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all .2s;
+  text-decoration: none;
+  display: inline-block;
+}
+.btn-secondary:hover { border-color: var(--muted); transform: translateY(-2px); }
+
+/* STATS */
+.hero-stats {
+  display: flex;
+  gap: 48px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.stat-item { text-align: center; }
+.stat-n {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 28px;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.stat-l { font-size: 10px; color: var(--muted); letter-spacing: 2px; }
+
+/* MOCKUP */
+.hero-mockup {
+  margin-top: 80px;
+  position: relative;
+  max-width: 900px;
+  width: 100%;
+}
+.mockup-frame {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 40px 80px rgba(0,0,0,.6), 0 0 60px rgba(0,255,136,.05);
+}
+.mockup-bar {
+  background: var(--panel2);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.mockup-dot { width: 10px; height: 10px; border-radius: 50%; }
+.mockup-body {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  height: 320px;
+}
+.mock-main { padding: 20px; border-right: 1px solid var(--border); }
+.mock-title {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 3px;
+  margin-bottom: 16px;
+}
+.mock-token {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.mock-score {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.mock-ring {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--safe);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--safe);
+  box-shadow: 0 0 10px rgba(0,255,136,.2);
+}
+.mock-tag { padding: 2px 6px; border-radius: 2px; font-size: 8px; border: 1px solid; }
+.mock-tag.ok { border-color: var(--safe); color: var(--safe); background: rgba(0,255,136,.08); }
+.mock-tag.bad { border-color: var(--danger); color: var(--danger); background: rgba(255,60,110,.08); }
+.mock-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mock-cell { background: var(--bg); border-radius: 3px; padding: 8px; }
+.mock-cv { font-size: 11px; font-weight: 700; margin-bottom: 2px; }
+.mock-cv.g { color: var(--safe); }
+.mock-cv.r { color: var(--danger); }
+.mock-cl { font-size: 8px; color: var(--muted); letter-spacing: 1px; }
+/* SIDEBAR MOCK */
+.mock-side { padding: 14px; overflow: hidden; }
+.mock-filter {
+  background: var(--panel2);
+  border-radius: 3px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+.mock-fl { font-size: 8px; letter-spacing: 2px; color: var(--muted); margin-bottom: 6px; }
+.mock-slider-track { height: 3px; background: var(--border); border-radius: 2px; position: relative; margin-bottom: 8px; }
+.mock-slider-fill { height: 100%; background: var(--accent); border-radius: 2px; width: 35%; }
+.mock-slider-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); position: absolute; top: -3.5px; left: 33%; box-shadow: 0 0 4px var(--accent); }
+.mock-fi {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 3px;
+  padding: 8px;
+  margin-bottom: 6px;
+}
+.mock-fi-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.mock-fi-sym { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 12px; }
+.mock-fi-new { padding: 1px 4px; background: rgba(0,255,136,.2); border: 1px solid rgba(0,255,136,.4); border-radius: 2px; font-size: 7px; color: var(--safe); font-weight: 700; }
+.mock-fi-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 3px; }
+.mock-fi-s { background: var(--bg); border-radius: 2px; padding: 3px; text-align: center; }
+.mock-fi-sv { font-size: 9px; font-weight: 700; }
+.mock-fi-sv.g { color: var(--safe); }
+.mock-fi-sl { font-size: 6px; color: var(--muted); }
+
+@keyframes scan-line {
+  0%,100% { opacity: 1; }
+  50% { opacity: .4; }
+}
+.scan-anim { animation: scan-line 2s infinite; }
+
+/* ─── FEATURES ─── */
+.features {
+  padding: 100px 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.section-label {
+  font-size: 9px;
+  letter-spacing: 4px;
+  color: var(--accent);
+  text-align: center;
+  margin-bottom: 12px;
+}
+.section-title {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: clamp(24px, 4vw, 40px);
+  text-align: center;
+  margin-bottom: 16px;
+}
+.section-sub {
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+  max-width: 500px;
+  margin: 0 auto 64px;
+}
+.feat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+@media(max-width:768px) { .feat-grid { grid-template-columns: 1fr; } }
+@media(max-width:1024px) { .feat-grid { grid-template-columns: repeat(2,1fr); } }
+
+.feat-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 28px 24px;
+  transition: all .3s;
+  position: relative;
+  overflow: hidden;
+}
+.feat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  transform: scaleX(0);
+  transition: transform .3s;
+}
+.feat-card:hover { border-color: rgba(0,255,136,.3); transform: translateY(-4px); box-shadow: 0 16px 40px rgba(0,0,0,.3); }
+.feat-card:hover::before { transform: scaleX(1); }
+.feat-icon {
+  font-size: 28px;
+  margin-bottom: 16px;
+  display: block;
+}
+.feat-title {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+.feat-desc { font-size: 11px; color: var(--muted); line-height: 1.8; }
+
+/* ─── PRICING ─── */
+.pricing {
+  padding: 100px 24px;
+  background: linear-gradient(180deg, transparent, rgba(0,255,136,.02), transparent);
+}
+.pricing-inner {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+.plans {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 0;
+}
+@media(max-width:768px) { .plans { grid-template-columns: 1fr; max-width: 400px; margin: 0 auto; } }
+
+.plan {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 32px 24px;
+  position: relative;
+  transition: all .3s;
+}
+.plan:hover { transform: translateY(-4px); border-color: rgba(255,255,255,.15); }
+.plan.featured {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, rgba(0,255,136,.06), var(--panel));
+  box-shadow: 0 0 40px rgba(0,255,136,.1);
+}
+.plan-badge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: var(--bg);
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  white-space: nowrap;
+}
+.plan-name {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 3px;
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+.plan.featured .plan-name { color: var(--accent); }
+.plan-price {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 42px;
+  margin-bottom: 4px;
+  color: var(--text);
+  line-height: 1;
+}
+.plan-period { font-size: 10px; color: var(--muted); margin-bottom: 24px; letter-spacing: 2px; }
+.plan-divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+.plan-features { list-style: none; margin-bottom: 28px; }
+.plan-features li {
+  padding: 7px 0;
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.5;
+}
+.plan-features li .check { color: var(--safe); flex-shrink: 0; }
+.plan-features li .cross { color: var(--danger); flex-shrink: 0; }
+.plan-features li.active { color: var(--text); }
+.plan-btn {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 3px;
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all .2s;
+}
+.plan-btn.free { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+.plan-btn.free:hover { border-color: var(--muted); color: var(--text); }
+.plan-btn.trader { background: var(--accent); color: var(--bg); }
+.plan-btn.trader:hover { background: #00cc70; transform: translateY(-1px); }
+.plan-btn.pro { background: transparent; border: 1px solid var(--accent4); color: var(--accent4); }
+.plan-btn.pro:hover { background: rgba(0,180,255,.1); transform: translateY(-1px); }
+
+/* ─── AUTH MODAL ─── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(5,8,16,.92);
+  z-index: 500;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+}
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 36px 32px;
+  width: 100%;
+  max-width: 400px;
+  position: relative;
+  animation: modalIn .25s ease;
+  margin: 16px;
+}
+@keyframes modalIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+
+.modal-close {
+  position: absolute;
+  top: 16px; right: 16px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  transition: color .2s;
+  line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+
+.modal-logo {
+  text-align: center;
+  margin-bottom: 24px;
+}
+.modal-logo-txt {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: 4px;
+  color: var(--accent);
+}
+.modal-logo-txt span { color: var(--text); }
+
+.modal-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px;
+  margin-bottom: 24px;
+}
+.modal-tab {
+  flex: 1;
+  padding: 8px;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all .2s;
+  color: var(--muted);
+  border: none;
+  background: none;
+  font-family: 'Space Mono', monospace;
+}
+.modal-tab.active { background: var(--accent); color: var(--bg); font-weight: 700; }
+
+.form-group { margin-bottom: 16px; }
+.form-label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: #9aa3b8;
+  margin-bottom: 7px;
+  font-weight: 700;
+}
+.form-input {
+  width: 100%;
+  background: rgba(255,255,255,.02);
+  border: 1px solid #2a3147;
+  border-radius: 6px;
+  padding: 13px 15px;
+  color: #ffffff;
+  font-family: 'Space Mono', monospace;
+  font-size: 13px;
+  outline: none;
+  transition: border-color .2s, background .2s;
+}
+.form-input:focus { border-color: var(--accent); background: rgba(0,255,136,.04); }
+.form-input::placeholder { color: #5a6178; }
+
+.form-btn {
+  width: 100%;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 3px;
+  padding: 13px;
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all .2s;
+  margin-top: 4px;
+}
+.form-btn:hover { background: #00cc70; }
+.form-btn:disabled { background: var(--muted); cursor: not-allowed; }
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  font-size: 10px;
+  color: var(--muted);
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.google-btn {
+  width: 100%;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 11px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all .2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.google-btn:hover { border-color: var(--muted); background: rgba(255,255,255,.03); }
+.google-icon {
+  width: 18px; height: 18px;
+  background: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.form-msg {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 3px;
+  font-size: 10px;
+  display: none;
+  line-height: 1.5;
+}
+.form-msg.ok { background: rgba(0,255,136,.1); border: 1px solid rgba(0,255,136,.3); color: var(--safe); display: block; }
+.form-msg.err { background: rgba(255,60,110,.1); border: 1px solid rgba(255,60,110,.3); color: var(--danger); display: block; }
+
+.forgot-link {
+  text-align: right;
+  margin-top: 4px;
+  font-size: 9px;
+  color: var(--muted);
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: color .2s;
+}
+.forgot-link:hover { color: var(--accent); }
+
+/* PLAN SELECT IN MODAL */
+.plan-select-info {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  display: none;
+}
+.plan-select-info.show { display: block; }
+.psi-label { font-size: 9px; letter-spacing: 2px; color: var(--muted); margin-bottom: 4px; }
+.psi-name { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 14px; color: var(--accent); }
+
+/* ─── DASHBOARD PREVIEW (after login) ─── */
+.dashboard-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: var(--bg);
+  overflow-y: auto;
+}
+.dashboard-overlay.open { display: block; }
+.dash-header {
+  padding: 16px 24px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dash-logo {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 3px;
+  color: var(--accent);
+}
+.dash-logo span { color: var(--text); }
+.dash-plan {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.dash-plan.free { background: rgba(74,80,104,.3); color: var(--muted); border: 1px solid var(--border); }
+.dash-plan.trader { background: rgba(0,255,136,.15); color: var(--safe); border: 1px solid rgba(0,255,136,.3); }
+.dash-plan.pro { background: rgba(0,180,255,.15); color: var(--accent4); border: 1px solid rgba(0,180,255,.3); }
+.dash-user { margin-left: auto; font-size: 10px; color: var(--muted); }
+.dash-logout {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 12px;
+  border-radius: 3px;
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all .2s;
+}
+.dash-logout:hover { border-color: var(--danger); color: var(--danger); }
+
+.dash-body {
+  padding: 32px 24px;
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: center;
+}
+.dash-welcome {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+.dash-welcome span { color: var(--accent); }
+.dash-sub { color: var(--muted); font-size: 12px; margin-bottom: 40px; line-height: 1.8; }
+
+.dash-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-bottom: 32px;
+}
+@media(max-width:500px) { .dash-cards { grid-template-columns: 1fr; } }
+
+.dash-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 24px;
+  text-align: left;
+  cursor: pointer;
+  transition: all .2s;
+  text-decoration: none;
+  display: block;
+  position: relative;
+  overflow: hidden;
+}
+.dash-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  transition: background .2s;
+}
+.dash-card:hover { border-color: rgba(255,255,255,.15); transform: translateY(-2px); }
+.dash-card.radar::before { background: var(--accent); }
+.dash-card.tweet::before { background: var(--accent4); }
+.dash-card.locked { opacity: .5; cursor: not-allowed; }
+.dash-card.locked:hover { transform: none; }
+.dc-icon { font-size: 24px; margin-bottom: 10px; }
+.dc-title {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.dc-desc { font-size: 10px; color: var(--muted); line-height: 1.6; }
+.dc-badge {
+  position: absolute;
+  top: 12px; right: 12px;
+  font-size: 8px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.dc-badge.live { background: rgba(0,255,136,.15); color: var(--safe); border: 1px solid rgba(0,255,136,.3); }
+.dc-badge.lock { background: rgba(255,60,110,.1); color: var(--danger); border: 1px solid rgba(255,60,110,.3); }
+
+.dash-upgrade {
+  background: linear-gradient(135deg, rgba(0,255,136,.08), rgba(0,180,255,.08));
+  border: 1px solid rgba(0,255,136,.2);
+  border-radius: 6px;
+  padding: 24px;
+  display: none;
+}
+.dash-upgrade.show { display: block; }
+.du-title {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.du-sub { font-size: 11px; color: var(--muted); margin-bottom: 16px; line-height: 1.6; }
+
+/* ─── FOOTER ─── */
+footer {
+  padding: 40px 24px;
+  text-align: center;
+  border-top: 1px solid var(--border);
+  position: relative;
+  z-index: 1;
+}
+.footer-logo {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 4px;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+.footer-logo span { color: var(--text); }
+.footer-links {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.footer-links a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 10px;
+  letter-spacing: 2px;
+  transition: color .2s;
+}
+.footer-links a:hover { color: var(--text); }
+.footer-copy { font-size: 9px; color: var(--muted); letter-spacing: 2px; }
+.footer-warn { font-size: 9px; color: var(--muted); margin-top: 8px; max-width: 500px; margin-left: auto; margin-right: auto; line-height: 1.6; }
+
+/* ─── SCROLL ANIM ─── */
+@keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+.reveal { opacity: 0; transform: translateY(20px); transition: opacity .6s ease, transform .6s ease; }
+.reveal.visible { opacity: 1; transform: translateY(0); }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="glow-orb"></div>
+
+<!-- ─── NAV ─── -->
+<nav>
+  <a href="#" class="nav-logo">SOL<span>RADAR</span></a>
+  <div class="nav-links">
+    <a href="#features">Özellikler</a>
+    <a href="#pricing">Fiyatlar</a>
+    <a href="#" onclick="openModal('login')" id="loginLink">Giriş Yap</a>
+    <a href="#" onclick="openModal('register')" class="nav-btn">Başla →</a>
+  </div>
+</nav>
+
+<!-- ─── HERO ─── -->
+<section class="hero">
+  <div class="hero-badge">
+    <div class="badge-dot"></div>
+    TUZAKLARDAN KURTULMAK İÇİN RADARDA KAL
+  </div>
+
+  <h1>
+    Meme coin mi?<br>
+    <span class="green">Önce radara bak.</span>
+  </h1>
+
+  <p class="hero-sub">
+    SOL RADAR tuzakları eler, güven skoru verir.<br>
+    Filtreden geçen coin — tek tıkla al.
+  </p>
+
+  <div class="hero-btns">
+    <a href="#" onclick="openModal('register')" class="btn-primary">Ücretsiz Dene →</a>
+    <a href="#how" class="btn-secondary">Nasıl Çalışır?</a>
+  </div>
+  <p style="font-size:11px;color:var(--muted);margin-bottom:48px;max-width:440px;line-height:1.7;">Günde onlarca token taranır — ekranına sadece kriterleri geçenler düşer.</p>
+
+  <div class="hero-stats">
+    <div class="stat-item">
+      <div class="stat-n">0-100</div>
+      <div class="stat-l">GÜVEN ENDEKSİ</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-n">CANLI</div>
+      <div class="stat-l">OTOMATİK TARAMA</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-n">3+</div>
+      <div class="stat-l">TUZAK TÜRÜ TESPİTİ</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-n">VETO</div>
+      <div class="stat-l">DUMP KORUMASI</div>
+    </div>
+  </div>
+
+  <!-- APP MOCKUP -->
+  <div class="hero-mockup reveal">
+    <div class="mockup-frame">
+      <div class="mockup-bar">
+        <div class="mockup-dot" style="background:#ff5f57"></div>
+        <div class="mockup-dot" style="background:#ffc12d"></div>
+        <div class="mockup-dot" style="background:#28c840"></div>
+        <div style="flex:1;text-align:center;font-size:9px;color:var(--muted);letter-spacing:2px;">SOL RADAR v6 — CANLI</div>
+      </div>
+      <div class="mockup-body">
+        <!-- MAIN -->
+        <div class="mock-main">
+          <div class="mock-title">TOKEN ANALİZİ</div>
+          <div class="mock-token">
+            <div class="mock-score">
+              <div class="mock-ring">87</div>
+              <div>
+                <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:14px;color:var(--safe);margin-bottom:4px;">GÜVENLİ</div>
+                <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                  <span class="mock-tag ok">✓ Freeze Yok</span>
+                  <span class="mock-tag ok">✓ Mint Kapalı</span>
+                  <span class="mock-tag bad">✗ Yeni Token</span>
+                </div>
+              </div>
+            </div>
+            <div class="mock-g2">
+              <div class="mock-cell"><div class="mock-cv g">$47.2K</div><div class="mock-cl">LİKİDİTE</div></div>
+              <div class="mock-cell"><div class="mock-cv g">+84.3%</div><div class="mock-cl">5DK DEĞİŞİM</div></div>
+              <div class="mock-cell"><div class="mock-cv">$2.3M</div><div class="mock-cl">PİYASA DEĞERİ</div></div>
+              <div class="mock-cell"><div class="mock-cv g">↑342 / ↓89</div><div class="mock-cl">ALIM/SATIM</div></div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+            <div style="background:var(--accent);color:var(--bg);padding:7px;border-radius:3px;font-size:9px;font-weight:700;text-align:center;">⚡ AL</div>
+            <div style="background:transparent;border:1px solid var(--border);padding:7px;border-radius:3px;font-size:9px;color:var(--muted);text-align:center;">📊 DEX</div>
+            <div style="background:transparent;border:1px solid var(--border);padding:7px;border-radius:3px;font-size:9px;color:var(--muted);text-align:center;">🔍 RUG</div>
+          </div>
+        </div>
+        <!-- SIDEBAR -->
+        <div class="mock-side">
+          <div style="font-size:8px;letter-spacing:3px;color:var(--muted);margin-bottom:8px;">RADAR — FİLTRELİ</div>
+          <div class="mock-filter">
+            <div class="mock-fl">MİN LİKİDİTE — $5K</div>
+            <div class="mock-slider-track"><div class="mock-slider-fill"></div><div class="mock-slider-thumb"></div></div>
+            <div class="mock-fl">RUG SKORU — 80+</div>
+            <div class="mock-slider-track" style="margin-bottom:0"><div class="mock-slider-fill" style="width:80%"></div><div class="mock-slider-thumb" style="left:78%"></div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div style="font-size:8px;color:var(--muted);letter-spacing:2px;">3 PASS / 24 TOPLAM</div>
+          </div>
+          <div class="mock-fi scan-anim">
+            <div class="mock-fi-top"><div class="mock-fi-sym">$PEPE3</div><span class="mock-fi-new">YENİ</span><div style="margin-left:auto;font-size:8px;color:var(--muted)">4dk</div></div>
+            <div class="mock-fi-stats">
+              <div class="mock-fi-s"><div class="mock-fi-sv g">$12K</div><div class="mock-fi-sl">LİK</div></div>
+              <div class="mock-fi-s"><div class="mock-fi-sv g">+43%</div><div class="mock-fi-sl">5DK</div></div>
+              <div class="mock-fi-s"><div class="mock-fi-sv g">84</div><div class="mock-fi-sl">RUG</div></div>
+            </div>
+          </div>
+          <div class="mock-fi" style="opacity:.7">
+            <div class="mock-fi-top"><div class="mock-fi-sym">$DOGE2</div><div style="margin-left:auto;font-size:8px;color:var(--muted)">18dk</div></div>
+            <div class="mock-fi-stats">
+              <div class="mock-fi-s"><div class="mock-fi-sv g">$31K</div><div class="mock-fi-sl">LİK</div></div>
+              <div class="mock-fi-s"><div class="mock-fi-sv g">+21%</div><div class="mock-fi-sl">5DK</div></div>
+              <div class="mock-fi-s"><div class="mock-fi-sv g">91</div><div class="mock-fi-sl">RUG</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FEATURES ─── -->
+<section id="how" style="padding:60px 20px;max-width:780px;margin:0 auto;text-align:center;">
+  <div class="section-label">NASIL ÇALIŞIR</div>
+  <h2 class="section-title reveal" style="margin-bottom:40px;">3 adımda trade</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;text-align:left;">
+    <div style="background:var(--card-bg,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:12px;padding:20px;">
+      <div style="font-size:28px;margin-bottom:10px;">🔍</div>
+      <div style="font-size:12px;font-weight:700;color:var(--accent);letter-spacing:1px;margin-bottom:6px;">1. RADAR TARAR</div>
+      <p style="font-size:11px;color:var(--muted);line-height:1.7;">Her 60 saniyede yüzlerce yeni Solana tokeni taranır. Likidite, rug skoru, holder dağılımı, tuzak analizi — hepsi otomatik.</p>
+    </div>
+    <div style="background:var(--card-bg,rgba(255,255,255,.03));border:1px solid rgba(0,255,136,.2);border-radius:12px;padding:20px;">
+      <div style="font-size:28px;margin-bottom:10px;">✅</div>
+      <div style="font-size:12px;font-weight:700;color:var(--accent);letter-spacing:1px;margin-bottom:6px;">2. FİLTREDEN GEÇER</div>
+      <p style="font-size:11px;color:var(--muted);line-height:1.7;">Kriterleri karşılayanlar güven skoru (0-100) ile sıralanır. Mint renounced, LP kilitli, top holder düşük — hepsi kontrol edilir.</p>
+    </div>
+    <div style="background:var(--card-bg,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:12px;padding:20px;">
+      <div style="font-size:28px;margin-bottom:10px;">⚡</div>
+      <div style="font-size:12px;font-weight:700;color:var(--accent);letter-spacing:1px;margin-bottom:6px;">3. TEK TIKLA AL</div>
+      <p style="font-size:11px;color:var(--muted);line-height:1.7;">Beğendiğin tokene tıkla, analizi gör. "Jupiter'da Al" butonuyla anında swap sayfasına git. CA kopyalamak yok, arama yok.</p>
+    </div>
+  </div>
+</section>
+
+<section class="features" id="features">
+  <div class="section-label">NEDEN SOL RADAR</div>
+  <h2 class="section-title reveal">Profesyonel trader'lar her hareketi trade etmez</h2>
+  <p class="section-sub reveal">Kalabalık breakout kovalar, tuzağa düşer. Sen doğru olanı bekle. SOL RADAR kötü trade'leri filtreler.</p>
+
+  <div class="feat-grid">
+    <div class="feat-card reveal">
+      <span class="feat-icon">🛡</span>
+      <div class="feat-title">Güvenlik Kontrol Listesi</div>
+      <p class="feat-desc">Mint renounced, freeze authority, LP kilitli mi? RugCheck + on-chain verisiyle her token otomatik kontrol edilir. Tehlikeli tokenlar elenip sana ulaşmaz.</p>
+    </div>
+    <div class="feat-card reveal">
+      <span class="feat-icon">👥</span>
+      <div class="feat-title">Holder Konsantrasyon Analizi</div>
+      <p class="feat-desc">Top1 cüzdan %10'u, Top3 %30'u geçerse token otomatik reddedilir. Tek kişinin elinde yarı token varsa herkes onun çıkışını bekler — sen değil.</p>
+    </div>
+    <div class="feat-card reveal">
+      <span class="feat-icon">⚡</span>
+      <div class="feat-title">Güven Endeksi 0-100</div>
+      <p class="feat-desc">RugCheck, tuzak skoru, holder dağılımı, likidite, momentum ve LP durumu birleştirilerek tek bir puan üretilir. 70+ CONFIRMED, 50-69 WATCH, altı gönderilmez.</p>
+    </div>
+    <div class="feat-card reveal">
+      <span class="feat-icon">🎯</span>
+      <div class="feat-title">Tuzak Tespiti</div>
+      <p class="feat-desc">Likidite avı, fake breakout, MM sweep ve hacim manipülasyonu gerçek zamanlı tespit edilir. Güzel görünen ama kurulmuş tuzaklar önceden işaretlenir.</p>
+    </div>
+    <div class="feat-card reveal">
+      <span class="feat-icon">🔔</span>
+      <div class="feat-title">Radar Alarm Sistemi</div>
+      <p class="feat-desc">60 saniyede bir otomatik tarama. Yeni token filtreden geçince ekranda radar ping animasyonu ve bildirim çıkar. Sürekli ekrana bakman gerekmiyor.</p>
+    </div>
+    <div class="feat-card reveal">
+      <span class="feat-icon">𝕏</span>
+      <div class="feat-title">Tweet + Tek Tık Alım</div>
+      <p class="feat-desc">X'te gördüğün tweeti yapıştır, CA otomatik taranır. Analiz sonrası tek tık Jupiter'da alım — vakit kaybetmeden pozisyona gir.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ─── PRICING ─── -->
+<section class="pricing" id="pricing">
+  <div class="pricing-inner">
+    <div class="section-label">FİYATLANDIRMA</div>
+    <h2 class="section-title reveal">Planını seç, hemen başla</h2>
+    <p class="section-sub reveal">Kripto ile öde (USDC/SOL). İstediğin zaman iptal et.</p>
+
+    <div class="plans">
+      <!-- PRO — SİTE -->
+      <div class="plan featured reveal">
+        <div class="plan-badge">EN POPÜLER</div>
+        <div class="plan-name">PRO — SİTE</div>
+        <div class="plan-price">$9</div>
+        <div class="plan-period">/AY</div>
+        <hr class="plan-divider">
+        <ul class="plan-features">
+          <li class="active"><span class="check">✓</span> Radar uygulaması (tam erişim)</li>
+          <li class="active"><span class="check">✓</span> Güven endeksi (0-100)</li>
+          <li class="active"><span class="check">✓</span> Canlı chart + sweep tespiti</li>
+          <li class="active"><span class="check">✓</span> RugCheck + tuzak analizi</li>
+          <li class="active"><span class="check">✓</span> Tweet sinyal tarayıcı</li>
+          <li class="active"><span class="check">✓</span> Kendi analizini kendin yap</li>
+        </ul>
+        <button class="plan-btn trader" onclick="openModal('register','pro')">Pro Başla →</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FOOTER ─── -->
+<footer>
+  <div class="footer-logo">SOL<span>RADAR</span></div>
+  <div class="footer-links">
+    <a href="#features">Özellikler</a>
+    <a href="#pricing">Fiyatlar</a>
+    <a href="#" onclick="openModal('login')">Giriş Yap</a>
+  </div>
+  <div class="footer-copy">© 2026 SOL RADAR — Tüm hakları saklıdır</div>
+  <div class="footer-warn">⚠ Bu araç yatırım tavsiyesi değildir. Kripto para yatırımları yüksek risk içerir. Her zaman kendi araştırmanızı yapın (DYOR).</div>
+</footer>
+
+<!-- ─── AUTH MODAL ─── -->
+<div class="modal-overlay" id="authModal" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-logo"><div class="modal-logo-txt">SOL<span>RADAR</span></div></div>
+
+    <div class="plan-select-info" id="planInfo">
+      <div class="psi-label">SEÇİLEN PLAN</div>
+      <div class="psi-name" id="planInfoName">PRO — SİTE · $9/ay</div>
+    </div>
+
+    <div class="modal-tabs">
+      <button class="modal-tab active" id="tab-login" onclick="switchAuthTab('login')">GİRİŞ YAP</button>
+      <button class="modal-tab" id="tab-register" onclick="switchAuthTab('register')">KAYIT OL</button>
+    </div>
+
+    <!-- LOGIN FORM -->
+    <div id="loginForm">
+      <div class="form-group">
+        <label class="form-label">E-POSTA</label>
+        <input class="form-input" id="loginEmail" type="email" placeholder="ornek@email.com"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">ŞİFRE</label>
+        <input class="form-input" id="loginPass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"/>
+        <div class="forgot-link" onclick="doReset()">Şifremi unuttum</div>
+      </div>
+      <button class="form-btn" id="loginBtn" onclick="doLogin()">GİRİŞ YAP →</button>
+      <div class="divider">VEYA</div>
+      <button class="google-btn" onclick="doGoogleLogin()">
+        <div class="google-icon">G</div>
+        Google ile Devam Et
+      </button>
+      <div class="form-msg" id="loginMsg"></div>
+    </div>
+
+    <!-- REGISTER FORM -->
+    <div id="registerForm" style="display:none">
+      <div class="form-group">
+        <label class="form-label">AD SOYAD</label>
+        <input class="form-input" id="regName" type="text" placeholder="Adın Soyadın"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">E-POSTA</label>
+        <input class="form-input" id="regEmail" type="email" placeholder="ornek@email.com"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">ŞİFRE</label>
+        <input class="form-input" id="regPass" type="password" placeholder="En az 6 karakter" onkeydown="if(event.key==='Enter')doRegister()"/>
+      </div>
+      <button class="form-btn" id="registerBtn" onclick="doRegister()">KAYIT OL →</button>
+      <div class="divider">VEYA</div>
+      <button class="google-btn" onclick="doGoogleLogin()">
+        <div class="google-icon">G</div>
+        Google ile Devam Et
+      </button>
+      <div class="form-msg" id="registerMsg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── DASHBOARD ─── -->
+<div class="dashboard-overlay" id="dashboardOverlay">
+  <div class="dash-header">
+    <div class="dash-logo">SOL<span>RADAR</span></div>
+    <div class="dash-plan" id="dashPlanBadge">FREE</div>
+    <div class="dash-user" id="dashUserEmail"></div>
+    <button class="dash-logout" onclick="doLogout()">ÇIKIŞ</button>
+  </div>
+  <div class="dash-body">
+    <div class="dash-welcome">Hoşgeldin, <span id="dashName">Trader</span> 👋</div>
+    <div class="dash-sub">Planın: <span id="dashPlanName" style="color:var(--accent)">Free</span> · Araçlarını aşağıdan seç.</div>
+
+    <div class="dash-cards" style="justify-content:center;">
+      <a href="radar.html" class="dash-card radar locked" id="cardRadar" style="max-width:360px;width:100%;">
+        <div class="dc-badge lock">PRO</div>
+        <div class="dc-icon">🛡</div>
+        <div class="dc-title">SOL RADAR</div>
+        <div class="dc-desc">Filtreden geçen coinleri gör. Güven skoru, RugCheck, tuzak analizi — tek ekranda. Tek tıkla Jupiter'da al.</div>
+      </a>
+    </div>
+
+    <div class="dash-upgrade" id="upgradeBox">
+      <div class="du-title">🚀 Üyelik Planları</div>
+      <div class="du-sub">Kripto ile öde, anında aktivasyon. Tek seferlik değil — aylık abonelik.</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:18px 0;text-align:left;">
+        <!-- PRO -->
+        <div style="background:rgba(0,255,136,.05);border:1px solid rgba(0,255,136,.25);border-radius:12px;padding:18px;">
+          <div style="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:1px;">PRO — SİTE</div>
+          <div style="font-size:24px;font-weight:800;margin:6px 0;">$9<span style="font-size:11px;color:var(--muted);font-weight:400;">/ay</span></div>
+          <div style="font-size:10px;color:var(--muted);line-height:1.7;">
+            ✓ Radar uygulaması (tam)<br>
+            ✓ Güven endeksi + canlı chart<br>
+            ✓ RugCheck + tuzak analizi<br>
+            ✓ Kendi analizini kendin yap
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:10px;">Gönder: <strong style="color:var(--text)">19 USDC</strong></div>
+        </div>
+        <!-- ELITE kaldırıldı -->
+      </div>
+
+      <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;text-align:left;">
+        <div style="font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;">USDC / SOL GÖNDER (Solana ağı):</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <code id="payWallet" style="font-size:11px;color:var(--accent);word-break:break-all;flex:1;min-width:200px;">EgPHRTm3NnfJc4Xv3KwsLd8nUWqZpqkjUxgxo5Wz4rWR</code>
+          <button onclick="navigator.clipboard.writeText(document.getElementById('payWallet').textContent);this.textContent='✓ Kopyalandı'" style="background:var(--accent);color:#050810;border:none;border-radius:6px;padding:8px 14px;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;">KOPYALA</button>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:10px;line-height:1.6;">
+          1️⃣ Adrese <strong style="color:var(--text)">9 USDC</strong> gönder (Solana ağı, PRO üyelik)<br>
+          2️⃣ <strong style="color:var(--accent)">@Solradarapp</strong>'e Telegram'dan kayıtlı e-postanı + işlem linkini yaz<br>
+          3️⃣ Hesabın <strong style="color:var(--text)">anında</strong> aktifleştirilir
+        </div>
+      </div>
+      <a href="https://t.me/Solradarapp" target="_blank" class="btn-primary" style="font-size:11px;padding:12px 28px;display:inline-block;text-decoration:none;">Ödedim, Aktivasyon İste →</a>
+    </div>
+  </div>
+</div>
+
+<!-- ─── FIREBASE SDK ─── -->
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, onAuthStateChanged, signOut, updateProfile } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+// ══════════════════════════════════════
+// 🔴 BURAYA KENDİ FIREBASE CONFIG'İNİ GİR
+// ══════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyA4u9QQwIHVPA60IvL_gtnyDSJEwldTi6E",
+  authDomain: "solradar-3e7bd.firebaseapp.com",
+  projectId: "solradar-3e7bd",
+  storageBucket: "solradar-3e7bd.firebasestorage.app",
+  messagingSenderId: "862941509006",
+  appId: "1:862941509006:web:aca67286d37d80170d60df"
+};
+// ══════════════════════════════════════
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
+
+let selectedPlan = 'free';
+
+// ── Expose to window ──
+window._auth = auth;
+window._db = db;
+window._googleProvider = googleProvider;
+window._selectedPlan = selectedPlan;
+
+// ── AUTH STATE ──
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    // Kullanıcı giriş yapmış
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    const plan = userDoc.exists() ? (userDoc.data().plan || 'free') : 'free';
+    showDashboard(user, plan);
+    closeModal();
+  }
+});
+
+// ── REGISTER ──
+window.doRegister = async () => {
+  const name = document.getElementById('regName').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const pass = document.getElementById('regPass').value;
+  const msg = document.getElementById('registerMsg');
+  const btn = document.getElementById('registerBtn');
+
+  if (!name || !email || !pass) { showMsg(msg, 'err', 'Tüm alanları doldurun.'); return; }
+  if (pass.length < 6) { showMsg(msg, 'err', 'Şifre en az 6 karakter olmalı.'); return; }
+
+  btn.disabled = true; btn.textContent = 'KAYIT YAPILIYOR...';
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    await updateProfile(cred.user, { displayName: name });
+    // Firestore'a kullanıcı kaydı
+    await setDoc(doc(db, 'users', cred.user.uid), {
+      name, email,
+      plan: window._selectedPlan || 'free',
+      createdAt: serverTimestamp(),
+      uid: cred.user.uid
+    });
+    showMsg(msg, 'ok', '✓ Kayıt başarılı! Yönlendiriliyor...');
+  } catch (e) {
+    const errs = { 'auth/email-already-in-use': 'Bu e-posta zaten kayıtlı.', 'auth/invalid-email': 'Geçersiz e-posta.', 'auth/weak-password': 'Şifre çok zayıf.' };
+    showMsg(msg, 'err', errs[e.code] || e.message);
+    btn.disabled = false; btn.textContent = 'KAYIT OL →';
+  }
+};
+
+// ── LOGIN ──
+window.doLogin = async () => {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  const msg = document.getElementById('loginMsg');
+  const btn = document.getElementById('loginBtn');
+
+  if (!email || !pass) { showMsg(msg, 'err', 'E-posta ve şifre girin.'); return; }
+
+  btn.disabled = true; btn.textContent = 'GİRİŞ YAPILIYOR...';
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+  } catch (e) {
+    const errs = { 'auth/user-not-found': 'Kullanıcı bulunamadı.', 'auth/wrong-password': 'Şifre hatalı.', 'auth/invalid-credential': 'E-posta veya şifre hatalı.', 'auth/too-many-requests': 'Çok fazla deneme. Biraz bekle.' };
+    showMsg(msg, 'err', errs[e.code] || 'Giriş başarısız.');
+    btn.disabled = false; btn.textContent = 'GİRİŞ YAP →';
+  }
+};
+
+// ── GOOGLE LOGIN ──
+window.doGoogleLogin = async () => {
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+    const ref = doc(db, 'users', user.uid);
+    const existing = await getDoc(ref);
+    if (!existing.exists()) {
+      await setDoc(ref, {
+        name: user.displayName || 'Trader',
+        email: user.email,
+        plan: window._selectedPlan || 'free',
+        createdAt: serverTimestamp(),
+        uid: user.uid
+      });
+    }
+  } catch (e) {
+    console.error('Google login:', e);
+  }
+};
+
+// ── RESET ──
+window.doReset = async () => {
+  const email = document.getElementById('loginEmail').value.trim();
+  const msg = document.getElementById('loginMsg');
+  if (!email) { showMsg(msg, 'err', 'Önce e-postanı gir.'); return; }
+  try {
+    await sendPasswordResetEmail(auth, email);
+    showMsg(msg, 'ok', '✓ Şifre sıfırlama e-postası gönderildi.');
+  } catch (e) {
+    showMsg(msg, 'err', 'E-posta gönderilemedi: ' + e.message);
+  }
+};
+
+// ── LOGOUT ──
+window.doLogout = async () => {
+  await signOut(auth);
+  document.getElementById('dashboardOverlay').classList.remove('open');
+};
+
+// ── DASHBOARD ──
+function showDashboard(user, plan) {
+  const overlay = document.getElementById('dashboardOverlay');
+  const badge = document.getElementById('dashPlanBadge');
+  const planName = document.getElementById('dashPlanName');
+  const userName = document.getElementById('dashName');
+  const userEmail = document.getElementById('dashUserEmail');
+  const upgradeBox = document.getElementById('upgradeBox');
+  const cardRadar = document.getElementById('cardRadar');
+
+  overlay.classList.add('open');
+  userEmail.textContent = user.email;
+  userName.textContent = user.displayName || user.email.split('@')[0];
+
+  badge.className = 'dash-plan ' + plan;
+  badge.textContent = plan.toUpperCase();
+  planName.textContent = plan === 'free' ? 'Free' : (plan === 'pro' ? 'Pro' : plan.toUpperCase());
+
+  const paid = ['pro','elite','trader'].includes(plan);
+  // cardTelegram kaldırıldı
+
+  // Plan kısıtlamaları
+  if (paid) {
+    upgradeBox.classList.remove('show');
+    cardRadar.classList.remove('locked');
+    cardRadar.querySelector('.dc-badge').className = 'dc-badge live';
+    cardRadar.querySelector('.dc-badge').textContent = 'CANLI';
+    // cardTelegram kaldırıldı
+  } else {
+    upgradeBox.classList.add('show');
+    cardRadar.classList.add('locked');
+    // Kilitli radar kartı → tıklayınca radar'a gitme, uyar
+    cardRadar.onclick = (e) => {
+      e.preventDefault();
+      upgradeBox.scrollIntoView({ behavior:'smooth' });
+    };
+  }
+}
+
+// ── HELPERS ──
+function showMsg(el, type, text) {
+  el.className = 'form-msg ' + type;
+  el.textContent = text;
+}
+</script>
+
+<script>
+// ── MODAL ──
+let currentPlan = 'free';
+
+function openModal(tab, plan) {
+  if (plan) {
+    currentPlan = plan;
+    window._selectedPlan = plan;
+    const info = document.getElementById('planInfo');
+    const planNames = { pro: 'PRO — SİTE · $9/ay' };
+    document.getElementById('planInfoName').textContent = planNames[plan] || '';
+    info.classList.toggle('show', !!planNames[plan]);
+  }
+  document.getElementById('authModal').classList.add('open');
+  switchAuthTab(tab || 'login');
+}
+
+function closeModal() {
+  document.getElementById('authModal').classList.remove('open');
+  clearForms();
+}
+
+function closeModalOutside(e) {
+  if (e.target === document.getElementById('authModal')) closeModal();
+}
+
+function switchAuthTab(tab) {
+  document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+  document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+  document.getElementById('loginForm').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('registerForm').style.display = tab === 'register' ? 'block' : 'none';
+}
+
+function clearForms() {
+  ['loginEmail','loginPass','regName','regEmail','regPass'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  ['loginMsg','registerMsg'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.className = 'form-msg';
+  });
+  ['loginBtn','registerBtn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.disabled = false; el.textContent = id === 'loginBtn' ? 'GİRİŞ YAP →' : 'KAYIT OL →'; }
+  });
+}
+
+// ESC key
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── SCROLL REVEAL ──
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
